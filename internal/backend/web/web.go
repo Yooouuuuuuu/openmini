@@ -261,7 +261,10 @@ func (w *Web) readModelMenu() ([]string, string, error) {
         }
         lab = strings.TrimSpace(lab)
         labels = append(labels, lab)
-        if w.exists(it.Locator("gem-menu-item-content.selected")) {
+        // The selected entry is marked with a checkmark, a "selected" class,
+        // or is simply disabled; the markup has used each of these.
+        if dis, _ := it.GetAttribute("aria-disabled", pw.LocatorGetAttributeOptions{Timeout: pw.Float(1000)}); dis == "true" ||
+            w.exists(it.Locator("gem-menu-item-content.selected")) || w.exists(it.Locator("[data-mat-icon-name='check']")) {
             selected = lab
         }
     }
@@ -279,6 +282,12 @@ func (w *Web) ensureModel(want string) error {
     if !w.exists(item) {
         w.page.Keyboard().Press("Escape")
         return fmt.Errorf("model %q is not in the picker (entries: %v)", want, w.modelOptions)
+    }
+    if dis, _ := item.First().GetAttribute("aria-disabled", pw.LocatorGetAttributeOptions{Timeout: pw.Float(1000)}); dis == "true" {
+        // disabled means it is the current selection
+        w.page.Keyboard().Press("Escape")
+        w.currentModel = want
+        return nil
     }
     if err := item.First().Click(pw.LocatorClickOptions{Timeout: pw.Float(5000)}); err != nil {
         w.page.Keyboard().Press("Escape")
