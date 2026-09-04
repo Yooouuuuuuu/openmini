@@ -1,0 +1,49 @@
+# openmini
+
+Your Google AI subscription as an OpenAI-compatible endpoint. Two backends behind one port:
+
+- **web**: drives gemini.google.com in a signed-in browser (the Gemini app quota).
+- **agy**: runs the Antigravity CLI with a tool-less agent (the Antigravity quota, with visible usage).
+
+```bash
+curl http://localhost:18000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "web/3.1 Pro",
+       "messages": [{"role": "user", "content": "Write a two-sentence story about a cat who learns to sail."}]}'
+```
+
+Model names pick the backend: `web/3.1 Pro`, `web/3.8 Flash`, `agy/gemini-3.1-pro-low`, `agy/claude-sonnet-4-6`,
+or `web/default` and `agy/default`. A bare name that exists in exactly one backend routes there; anything else goes
+to `default_backend`. `GET /v1/models` lists everything. Add `"stream": true` for server-sent events; the first
+chunk acknowledges the request and `: openmini phase=...` comments report submitted and generating before the text.
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /v1/chat/completions` | OpenAI chat completions |
+| `GET /v1/models` | all backend models, prefixed |
+| `GET /usage` (`?format=text`) | remaining quota per backend |
+| `GET /status` (`?format=text`) | what every request is doing: queued, submitted, generating, with elapsed time and characters so far |
+| `GET /health` | backend readiness |
+| `GET /debug/web/html`, `/debug/web/screenshot` | the live Gemini page, for fixing selectors |
+
+## Setup
+
+```bash
+./run.sh            # creates config.toml from the template on first run, builds, runs doctor, asks, starts tmux
+./openmini doctor   # checks alone
+./openmini usage    # quota
+./openmini status   # request state
+```
+
+Sign-in is done once by hand: for the web backend set `headless = false`, start, sign in to Google in the window,
+then switch back to headless; for agy run `agy` once in a terminal. `config.toml` is yours and not committed;
+`config.example.toml` is the template. Logs go to `logs/<date>.log`, one file per day, old ones removed; they hold
+ids, sizes and timings, never prompt or reply text.
+
+## Notes
+
+- The Gemini web box refuses single lines over ~32k characters and the backend drops messages somewhere above ~100k;
+  agy takes long prompts through stdin without those limits.
+- Gemini's own error notices and refusals are passed through as the reply. Failures to get any reply come back as
+  content prefixed `[openmini/<backend>]`, never as HTTP errors, except malformed requests and bad API keys.
+- Set `api_keys` in config.toml before exposing the port beyond localhost or your tailnet.

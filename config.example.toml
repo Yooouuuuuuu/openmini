@@ -1,0 +1,59 @@
+# openmini configuration. Copy to config.toml and edit; config.toml is not committed.
+
+[server]
+port = 18000
+# Backend used when the model name has no "web/" or "agy/" prefix.
+default_backend = "web"
+# Optional. When set, requests must send "Authorization: Bearer <key>". Leave
+# empty for localhost or tailnet-only use.
+api_keys = []
+# Seconds to wait for a complete reply once it has started; 0 = no limit.
+timeout = 0
+
+[log]
+directory = "./logs"
+# One file per day; older files are deleted. The log never contains prompt or
+# reply text, only ids, sizes, timings and status.
+keep_days = 7
+
+[prompt]
+# "direct": message contents are sent in order, unchanged, joined by blank
+# lines. "structured": role labels and an Instructions block are added.
+format = "direct"
+# Optional text placed before every conversation.
+preamble = ""
+# Ask the model to answer directly without search, code execution, images or
+# tool calls (prompt text only; not enforced).
+discourage_tools = false
+
+[web]
+# Drives gemini.google.com in a browser with a persistent, signed-in profile.
+enabled = true
+headless = true
+profile_dir = "./data/browser-profile"
+# Model picker entry to select, e.g. "3.1 Pro", "3.8 Flash". Empty leaves it.
+model = "3.1 Pro"
+# "paste" carries long multi-line prompts intact; "insert" is capped at ~32k by the page.
+input_method = "paste"
+# "copy" reads the reply from Gemini's copy button (exact Markdown); "html" converts the rendered reply.
+reply_source = "copy"
+# For prompts over max_inline_chars: "paste" (send anyway), "attach" (upload as a text file), "split" (several messages).
+long_prompt_mode = "paste"
+max_inline_chars = 30000
+attach_name = "prompt.txt"
+attach_fill_box = false
+# Seconds to wait for Gemini to open a reply after submitting; 0 = no limit.
+start_timeout = 180
+# Extra attempts when Gemini answers with an error notice or refusal; 0 passes everything through.
+retries = 0
+
+[agy]
+# Runs the Antigravity CLI (agy) with a tool-less custom agent.
+enabled = true
+binary = "~/.local/bin/agy"
+agent = "storyteller"
+mode = "plan"
+model = "gemini-3.1-pro-low"
+effort = ""
+workspace = "./data/agy-workspace"
+parallel = 1

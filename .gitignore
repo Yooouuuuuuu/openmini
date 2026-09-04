@@ -1,0 +1,6 @@
+# real config with your settings; commit only config.example.toml
+config.toml
+# runtime data
+logs/
+data/
+openmini
