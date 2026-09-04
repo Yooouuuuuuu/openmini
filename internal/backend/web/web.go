@@ -106,8 +106,10 @@ type Web struct {
     signedIn   bool
 
     modelOptions []string
+    unavailable  []string // picker entries currently disabled (usage limit reached)
     currentModel string
     desiredModel string
+    menuRead     time.Time
 }
 
 func New(cfg config.Web, timeoutSec int, logf func(string, ...any)) *Web {
@@ -131,8 +133,30 @@ func (w *Web) Ready() error {
     return nil
 }
 
+// Usage reports what the picker shows: the model in use and the entries the
+// app has disabled, which is how the Gemini app signals a usage limit.
 func (w *Web) Usage() (any, error) {
-    return map[string]string{"note": "the Gemini app exposes no usage counter; a limit shows up as a refusal or as a reply that never starts"}, nil
+    if !w.started {
+        return nil, fmt.Errorf("browser not started")
+    }
+    return map[string]any{
+        "current_model": w.currentPickerLabel(),
+        "unavailable":   w.unavailable,
+        "menu_read_at":  w.menuRead.Format(time.RFC3339),
+        "note":          "the Gemini app shows no counter; disabled picker entries mean their usage limit is reached",
+    }, nil
+}
+
+// currentPickerLabel reads the model named in the picker button's label,
+// e.g. 「Flash-Lite」, without opening the menu.
+func (w *Web) currentPickerLabel() string {
+    raw, err := w.page.Locator("[data-test-id='bard-mode-menu-button']").First().GetAttribute("aria-label", pw.LocatorGetAttributeOptions{Timeout: pw.Float(2000)})
+    if err == nil {
+        if m := regexp.MustCompile(`「([^」]+)」`).FindStringSubmatch(raw); m != nil {
+            return m[1]
+        }
+    }
+    return w.currentModelLabel()
 }
 
 // Start launches the browser with the persistent profile and opens Gemini.
@@ -171,13 +195,13 @@ func (w *Web) Start() error {
         w.logf("web: not signed in; profile %s. Set headless = false, restart, sign in once in the window.", profileDir)
         return nil
     }
-    if labels, sel, err := w.readModelMenu(); err == nil {
-        w.modelOptions, w.currentModel = labels, sel
-        w.logf("web: signed in; model picker %v, selected %q", labels, sel)
+    if labels, sel, off, err := w.readModelMenu(); err == nil {
+        w.modelOptions, w.currentModel, w.unavailable = labels, sel, off
+        w.logf("web: signed in; model picker %v, selected %q, unavailable %v", labels, sel, off)
     } else {
         w.logf("web: signed in; picker shows %q (menu not readable: %v)", w.currentModelLabel(), err)
     }
-    if err := w.ensureModel(w.cfg.Model); err != nil {
+    if _, err := w.ensureModel(w.cfg.Model); err != nil {
         w.logf("web: warning: %v", err)
     }
     return nil
@@ -244,66 +268,78 @@ func (w *Web) openModelMenu() error {
     return nil
 }
 
-func (w *Web) readModelMenu() ([]string, string, error) {
-    if err := w.openModelMenu(); err != nil {
-        return nil, "", err
+// readModelMenu opens the picker and returns its entries, the selected one
+// (checkmark or "selected" class) and the disabled ones (usage limit reached).
+func (w *Web) readModelMenu() (labels []string, selected string, disabled []string, err error) {
+    if err = w.openModelMenu(); err != nil {
+        return nil, "", nil, err
     }
     defer w.page.Keyboard().Press("Escape")
     items := w.page.Locator("[role='menuitem']")
     n, _ := items.Count()
-    var labels []string
-    selected := ""
     for i := 0; i < n; i++ {
         it := items.Nth(i)
-        lab, err := it.Locator("span.label").First().TextContent(pw.LocatorTextContentOptions{Timeout: pw.Float(2000)})
-        if err != nil || strings.TrimSpace(lab) == "" {
+        lab, e := it.Locator("span.label").First().TextContent(pw.LocatorTextContentOptions{Timeout: pw.Float(2000)})
+        if e != nil || strings.TrimSpace(lab) == "" {
             continue
         }
         lab = strings.TrimSpace(lab)
         labels = append(labels, lab)
-        // The selected entry is marked with a checkmark, a "selected" class,
-        // or is simply disabled; the markup has used each of these.
-        if dis, _ := it.GetAttribute("aria-disabled", pw.LocatorGetAttributeOptions{Timeout: pw.Float(1000)}); dis == "true" ||
-            w.exists(it.Locator("gem-menu-item-content.selected")) || w.exists(it.Locator("[data-mat-icon-name='check']")) {
+        if w.exists(it.Locator("gem-menu-item-content.selected")) || w.exists(it.Locator("[data-mat-icon-name='check']")) {
             selected = lab
         }
+        if dis, _ := it.GetAttribute("aria-disabled", pw.LocatorGetAttributeOptions{Timeout: pw.Float(1000)}); dis == "true" {
+            disabled = append(disabled, lab)
+        }
     }
-    return labels, selected, nil
+    w.menuRead = time.Now()
+    return labels, selected, disabled, nil
 }
 
-func (w *Web) ensureModel(want string) error {
+// ensureModel selects want. When the app has disabled that entry (usage
+// limit), it returns a note and the request proceeds on the current model.
+func (w *Web) ensureModel(want string) (note string, err error) {
     if want == "" || want == w.currentModel {
-        return nil
+        return "", nil
+    }
+    labels, sel, off, err := w.readModelMenu()
+    if err != nil {
+        return "", err
+    }
+    w.modelOptions, w.currentModel, w.unavailable = labels, sel, off
+    if want == sel {
+        return "", nil
+    }
+    for _, d := range off {
+        if strings.EqualFold(d, want) {
+            note = fmt.Sprintf("requested %q is unavailable in the Gemini app (usage limit reached); using %q", want, sel)
+            w.logf("web: %s", note)
+            return note, nil
+        }
     }
     if err := w.openModelMenu(); err != nil {
-        return err
+        return "", err
     }
     item := w.page.Locator("[role='menuitem']", pw.PageLocatorOptions{HasText: want})
     if !w.exists(item) {
         w.page.Keyboard().Press("Escape")
-        return fmt.Errorf("model %q is not in the picker (entries: %v)", want, w.modelOptions)
-    }
-    if dis, _ := item.First().GetAttribute("aria-disabled", pw.LocatorGetAttributeOptions{Timeout: pw.Float(1000)}); dis == "true" {
-        // disabled means it is the current selection
-        w.page.Keyboard().Press("Escape")
-        w.currentModel = want
-        return nil
+        return "", fmt.Errorf("model %q is not in the picker (entries: %v)", want, labels)
     }
     if err := item.First().Click(pw.LocatorClickOptions{Timeout: pw.Float(5000)}); err != nil {
         w.page.Keyboard().Press("Escape")
-        return fmt.Errorf("selecting model %q: %v", want, err)
+        return "", fmt.Errorf("selecting model %q: %v", want, err)
     }
     time.Sleep(800 * time.Millisecond)
     w.currentModel = want
     w.logf("web: model picker switched to %q", want)
-    return nil
+    return "", nil
 }
 
 // ---------------------------------------------------------------------------
 // Chat mechanics
 // ---------------------------------------------------------------------------
 
-func (w *Web) newChat() error {
+func (w *Web) newChat(c backend.Call) error {
     t0 := time.Now()
     if _, err := w.page.Goto(geminiURL, pw.PageGotoOptions{WaitUntil: pw.WaitUntilStateDomcontentloaded}); err != nil {
         return fmt.Errorf("open new chat: %v", err)
@@ -317,7 +353,14 @@ func (w *Web) newChat() error {
         return fmt.Errorf("prompt box did not appear within %s", pageWait)
     }
     w.logf("web: new chat ready in %.1fs", time.Since(t0).Seconds())
-    return w.ensureModel(w.desiredModel)
+    note, err := w.ensureModel(w.desiredModel)
+    if err != nil {
+        return err
+    }
+    if note != "" && c.OnPhase != nil {
+        c.OnPhase("model", note)
+    }
+    return nil
 }
 
 func (w *Web) attachText(name, text string) error {
@@ -409,7 +452,7 @@ func isGeminiError(reply string) bool {
 }
 
 func (w *Web) ask(c backend.Call) (string, error) {
-    if err := w.newChat(); err != nil {
+    if err := w.newChat(c); err != nil {
         return "", err
     }
     limit := w.cfg.MaxInlineChars

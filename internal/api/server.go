@@ -189,8 +189,15 @@ func (s *Server) handleUsage(c *fiber.Ctx) error {
         }
         out[name] = u
         switch v := u.(type) {
-        case map[string]string:
-            fmt.Fprintf(&text, "%s: %s\n", name, v["note"])
+        case map[string]any:
+            keys := make([]string, 0, len(v))
+            for k := range v {
+                keys = append(keys, k)
+            }
+            sort.Strings(keys)
+            for _, k := range keys {
+                fmt.Fprintf(&text, "%s: %-14s %v\n", name, k, v[k])
+            }
         default:
             b, _ := json.Marshal(v)
             var rows []map[string]string
@@ -367,10 +374,21 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 
     if !req.Stream {
         t0 := time.Now()
-        call.OnPhase = func(p, note string) { s.st.Update(id, state.Phase(p), 0, note) }
+        var noteHeader string
+        call.OnPhase = func(p, note string) {
+            if p == "model" {
+                noteHeader = note
+                s.st.Update(id, state.Queued, 0, note)
+                return
+            }
+            s.st.Update(id, state.Phase(p), 0, note)
+        }
         call.OnText = func(soFar string) { s.st.Update(id, state.Generating, backend.Chars(soFar), "") }
         res, err := b.Complete(call)
         reply := finish(res, err, t0)
+        if noteHeader != "" {
+            c.Set("X-Openmini-Note", noteHeader)
+        }
         return c.JSON(fiber.Map{
             "id": id, "object": "chat.completion", "created": created, "model": shown,
             "choices": []fiber.Map{{"index": 0, "message": fiber.Map{"role": "assistant", "content": reply}, "finish_reason": "stop"}},
@@ -404,6 +422,11 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
         sent := ""
         t0 := time.Now()
         call.OnPhase = func(p, note string) {
+            if p == "model" {
+                s.st.Update(id, state.Queued, 0, note)
+                write(": openmini note=" + strings.ReplaceAll(note, "\n", " ") + "\n\n")
+                return
+            }
             s.st.Update(id, state.Phase(p), 0, note)
             write(": openmini phase=" + p + "\n\n")
         }
