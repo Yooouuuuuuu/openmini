@@ -163,9 +163,11 @@ model = "3.1 Pro"
 input_method = "paste"
 # "copy" reads the reply from Gemini's copy button (exact Markdown); "html" converts the rendered reply.
 reply_source = "copy"
-# For prompts over max_inline_chars: "paste" (send anyway), "attach" (upload as a text file), "split" (several messages).
-long_prompt_mode = "paste"
-max_inline_chars = 30000
+# Prompts up to max_inline_chars are pasted (verified intact up to ~100k characters);
+# longer ones use long_prompt_mode: "attach" (upload as a text file, verified at 104k),
+# "split" (several messages), or "paste" (send anyway; the backend drops very long ones).
+long_prompt_mode = "attach"
+max_inline_chars = 100000
 attach_name = "prompt.txt"
 attach_fill_box = false
 # Seconds to wait for Gemini to open a reply after submitting; 0 = no limit.

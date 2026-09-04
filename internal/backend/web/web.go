@@ -206,7 +206,12 @@ func (w *Web) exists(l pw.Locator) bool {
     return err == nil && n > 0
 }
 
-func (w *Web) waitMillis() *float64 { return pw.Float(float64(w.timeout) * 1000) }
+// pageWait caps waits on page mechanics (prompt box, file input, upload chip).
+// These are not reply waits: if the page shows a sign-in screen, a request
+// must fail quickly instead of hanging on an unlimited reply timeout.
+const pageWait = 60 * time.Second
+
+func (w *Web) waitMillis() *float64 { return pw.Float(float64(pageWait / time.Millisecond)) }
 
 func (w *Web) deadlinePassed(start time.Time) bool {
     return w.timeout > 0 && time.Since(start) > time.Duration(w.timeout)*time.Second
@@ -296,7 +301,11 @@ func (w *Web) newChat() error {
     }
     box := w.page.Locator(promptBoxSel)
     if err := box.WaitFor(pw.LocatorWaitForOptions{State: pw.WaitForSelectorStateVisible, Timeout: w.waitMillis()}); err != nil {
-        return fmt.Errorf("prompt box did not appear; is the browser signed in? (%v)", err)
+        if !w.exists(w.page.Locator(signedInSel)) {
+            w.signedIn = false
+            return fmt.Errorf("the browser is no longer signed in to Google; set headless = false, restart, and sign in once")
+        }
+        return fmt.Errorf("prompt box did not appear within %s", pageWait)
     }
     w.logf("web: new chat ready in %.1fs", time.Since(t0).Seconds())
     return w.ensureModel(w.desiredModel)
@@ -325,8 +334,8 @@ func (w *Web) waitForUpload() error {
     busy := w.page.Locator("uploader-file-preview-container mat-progress-spinner, uploader-file-preview-container mat-progress-bar, uploader-file-preview-container [class*='uploading'], uploader-file-preview-container [class*='loading']")
     start := time.Now()
     for w.exists(busy) {
-        if w.deadlinePassed(start) {
-            return fmt.Errorf("attachment upload did not finish within %ds", w.timeout)
+        if time.Since(start) > 5*pageWait {
+            return fmt.Errorf("attachment upload did not finish within %s", 5*pageWait)
         }
         time.Sleep(200 * time.Millisecond)
     }
