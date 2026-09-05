@@ -38,6 +38,15 @@ func New(cfg *config.Config, log *logging.Logger, backends map[string]backend.Ba
 
 func (s *Server) Listen() error {
     app := fiber.New(fiber.Config{DisableStartupMessage: true, BodyLimit: 1024 * 1024 * 1024})
+    // log every request that does not succeed: wrong paths and bad keys are
+    // otherwise invisible, and clients report them as "refused"
+    app.Use(func(c *fiber.Ctx) error {
+        err := c.Next()
+        if st := c.Response().StatusCode(); st >= 400 || err != nil {
+            s.log.Printf("%s %s -> %d from %s", c.Method(), c.OriginalURL(), st, c.IP())
+        }
+        return err
+    })
     app.Use(s.auth)
     app.Get("/health", s.handleHealth)
     app.Get("/status", s.handleStatus)
