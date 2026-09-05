@@ -564,7 +564,28 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
     last := ""
     lastChange := time.Now()
     short := pw.Float(2000)
+    opened := time.Now()
+    gone := time.Time{}
+    noText := 2 * time.Duration(w.cfg.StartTimeout) * time.Second
+    if noText <= 0 {
+        noText = 6 * time.Minute
+    }
     for {
+        // The reply element can vanish when Gemini reloads the page; without
+        // this the loop would wait forever on nothing.
+        if !w.exists(reply) {
+            if gone.IsZero() {
+                gone = time.Now()
+            } else if time.Since(gone) > pageWait {
+                return last, fmt.Errorf("the reply disappeared from the page after %.0fs (page reloaded?)", time.Since(opened).Seconds())
+            }
+        } else {
+            gone = time.Time{}
+        }
+        // A reply that never shows any text is dead, whatever its busy state.
+        if last == "" && time.Since(opened) > noText {
+            return "", errDeadReply
+        }
         if w.exists(reply) {
             if raw, err := reply.Evaluate(cleanReplyJS, nil, pw.LocatorEvaluateOptions{Timeout: short}); err == nil {
                 if html, ok := raw.(string); ok {
