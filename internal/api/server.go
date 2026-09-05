@@ -42,7 +42,11 @@ func (s *Server) Listen() error {
     // otherwise invisible, and clients report them as "refused"
     app.Use(func(c *fiber.Ctx) error {
         err := c.Next()
-        if st := c.Response().StatusCode(); st >= 400 || err != nil {
+        st := c.Response().StatusCode()
+        if e, ok := err.(*fiber.Error); ok {
+            st = e.Code // unmatched routes report their status through the error
+        }
+        if st >= 400 || err != nil {
             s.log.Printf("%s %s -> %d from %s", c.Method(), c.OriginalURL(), st, c.IP())
         }
         return err
