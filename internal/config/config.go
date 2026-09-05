@@ -60,7 +60,7 @@ type Agy struct {
     Workspace string `toml:"workspace"`
     Parallel  int    `toml:"parallel"`
     // "web": hand oversized prompts to the web backend; "warn": send them to agy
-    // anyway and report the cut; "fail": refuse them.
+    // anyway and report the dropped tail; "fail": refuse them.
     OversizeAction string `toml:"oversize_action"`
 }
 
@@ -188,8 +188,7 @@ model = "gemini-3.1-pro-low"
 effort = ""
 workspace = "./data/agy-workspace"
 parallel = 1
-# agy silently cuts a chunk out of the middle of any message above ~192,000
-# bytes (about 100k Chinese or 190k English characters). "web" hands such
+# agy silently drops everything after the first 192,000 bytes of a message (about 100k Chinese or 190k English characters). "web" hands such
 # prompts to the web backend (file attachment) with a note; "warn" sends them to
 # agy anyway and reports the cut; "fail" refuses them.
 oversize_action = "web"
