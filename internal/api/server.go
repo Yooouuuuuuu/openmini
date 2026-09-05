@@ -17,6 +17,7 @@ import (
     "github.com/gofiber/fiber/v2"
 
     "openmini/internal/backend"
+    "openmini/internal/backend/agy"
     "openmini/internal/backend/web"
     "openmini/internal/config"
     "openmini/internal/logging"
@@ -363,7 +364,21 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
     if shown == "" {
         shown = b.Name() + "/default"
     }
+    // agy silently cuts the middle out of messages above its cap; with
+    // oversize_action = "web" such prompts go to the web backend instead,
+    // which delivers them as a file attachment.
+    rerouted := ""
+    if b.Name() == "agy" && len(full) > agy.MaxMessageBytes && s.cfg.Agy.OversizeAction == "web" {
+        if w, ok := s.backends["web"]; ok && w.Ready() == nil {
+            rerouted = fmt.Sprintf("prompt is %d bytes, above agy's %d-byte message cap; sent to the web backend instead", len(full), agy.MaxMessageBytes)
+            b, model = w, ""
+        }
+    }
     s.st.Start(id, b.Name(), model, backend.Chars(full), req.Stream)
+    if rerouted != "" {
+        s.log.Printf("%s %s", id, rerouted)
+        s.st.Update(id, state.Queued, 0, rerouted)
+    }
     s.log.Printf("%s %s model=%q stream=%v prompt=%d chars", id, b.Name(), model, req.Stream, backend.Chars(full))
     c.Set("X-Openmini-Request-Id", id)
 
@@ -387,7 +402,7 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 
     if !req.Stream {
         t0 := time.Now()
-        var noteHeader string
+        noteHeader := rerouted
         call.OnPhase = func(p, note string) {
             if p == "model" || p == "note" {
                 noteHeader = note
@@ -432,6 +447,9 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
         // first chunk acknowledges the request; phases follow as SSE comments
         send(chunk(fiber.Map{"role": "assistant", "content": ""}, nil))
         write(": openmini phase=queued id=" + id + "\n\n")
+        if rerouted != "" {
+            write(": openmini note=" + rerouted + "\n\n")
+        }
         sent := ""
         t0 := time.Now()
         call.OnPhase = func(p, note string) {

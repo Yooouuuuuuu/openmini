@@ -22,6 +22,9 @@ import (
 // middle of a message (measured from its transcripts: 192,159 bytes kept).
 const maxMessageBytes = 192000
 
+// MaxMessageBytes is exported so the API layer can reroute oversized prompts.
+const MaxMessageBytes = maxMessageBytes
+
 type Agy struct {
     cfg     config.Agy
     timeout int
