@@ -59,3 +59,8 @@ model = "gemini-3.1-pro-low"
 effort = ""
 workspace = "./data/agy-workspace"
 parallel = 1
+# agy silently cuts a chunk out of the middle of any message above ~192,000
+# bytes (about 100k Chinese or 190k English characters). "warn" sends it anyway
+# and reports the cut in the state, stream comments and X-Openmini-Note header;
+# "fail" refuses such requests instead.
+oversize_action = "warn"

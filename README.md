@@ -42,8 +42,9 @@ ids, sizes and timings, never prompt or reply text.
 
 ## Notes
 
-- The Gemini web box refuses single lines over ~32k characters and the backend drops messages somewhere above ~100k;
-  agy takes long prompts through stdin without those limits.
+- Size limits: the Gemini web box refuses single lines over ~32k characters, pasted prompts arrive intact up to ~100k characters
+  and larger ones go as a file attachment; agy silently cuts the middle out of any message above ~192,000 bytes (about 100k
+  Chinese or 190k English characters), which openmini reports as a note or refuses (`oversize_action`).
 - Gemini's own error notices and refusals are passed through as the reply. Failures to get any reply come back as
   content prefixed `[openmini/<backend>]`, never as HTTP errors, except malformed requests and bad API keys.
 - Set `api_keys` in config.toml before exposing the port beyond localhost or your tailnet.

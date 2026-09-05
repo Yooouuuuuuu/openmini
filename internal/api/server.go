@@ -389,7 +389,7 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
         t0 := time.Now()
         var noteHeader string
         call.OnPhase = func(p, note string) {
-            if p == "model" {
+            if p == "model" || p == "note" {
                 noteHeader = note
                 s.st.Update(id, state.Queued, 0, note)
                 return
@@ -435,7 +435,7 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
         sent := ""
         t0 := time.Now()
         call.OnPhase = func(p, note string) {
-            if p == "model" {
+            if p == "model" || p == "note" {
                 s.st.Update(id, state.Queued, 0, note)
                 write(": openmini note=" + strings.ReplaceAll(note, "\n", " ") + "\n\n")
                 return

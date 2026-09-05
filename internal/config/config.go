@@ -59,6 +59,9 @@ type Agy struct {
     Effort    string `toml:"effort"`
     Workspace string `toml:"workspace"`
     Parallel  int    `toml:"parallel"`
+    // "warn" (default): send oversized prompts anyway and report the cut;
+    // "fail": refuse them, since agy would silently drop part of the message.
+    OversizeAction string `toml:"oversize_action"`
 }
 
 // Load reads path and fills in defaults for anything left out.
@@ -185,4 +188,9 @@ model = "gemini-3.1-pro-low"
 effort = ""
 workspace = "./data/agy-workspace"
 parallel = 1
+# agy silently cuts a chunk out of the middle of any message above ~192,000
+# bytes (about 100k Chinese or 190k English characters). "warn" sends it anyway
+# and reports the cut in the state, stream comments and X-Openmini-Note header;
+# "fail" refuses such requests instead.
+oversize_action = "warn"
 `

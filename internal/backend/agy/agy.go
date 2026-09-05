@@ -18,6 +18,10 @@ import (
     "openmini/internal/config"
 )
 
+// maxMessageBytes is the size above which agy silently cuts a chunk out of the
+// middle of a message (measured from its transcripts: 192,159 bytes kept).
+const maxMessageBytes = 192000
+
 type Agy struct {
     cfg     config.Agy
     timeout int
@@ -68,6 +72,17 @@ type result struct {
 }
 
 func (a *Agy) Complete(c backend.Call) (backend.Result, error) {
+    if over := len(c.Prompt) - maxMessageBytes; over > 0 {
+        note := fmt.Sprintf("prompt is %d bytes; agy truncates messages above %d bytes and would cut about %d bytes from the middle", len(c.Prompt), maxMessageBytes, over)
+        a.logf("agy: %s (%s)", note, c.ID)
+        if a.cfg.OversizeAction == "fail" {
+            return backend.Result{}, fmt.Errorf("%s (agy.oversize_action = \"fail\")", note)
+        }
+        if c.OnPhase != nil {
+            c.OnPhase("note", note)
+        }
+    }
+
     a.sem <- struct{}{}
     defer func() { <-a.sem }()
 
