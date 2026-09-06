@@ -22,11 +22,10 @@ chunk acknowledges the request and `: openmini phase=...` comments report submit
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /` | usage page: one card per backend with its own Refresh button; nothing is fetched on load except cached values |
-| `GET /usage/cached`, `POST /usage/refresh?backend=` | the cache behind that page |
+| `GET /usage` | the dashboard: one tile per backend with its own Refresh button, running requests with Stop; nothing is fetched on open except cached values (`/` redirects here) |
+| `GET /usage/cached`, `POST /usage/refresh?backend=` | the cache behind that page; refresh asks one backend |
 | `POST /v1/chat/completions` | OpenAI chat completions |
 | `GET /v1/models` | all backend models, prefixed |
-| `GET /usage` (`?format=text`) | remaining quota per backend |
 | `GET /status` (`?format=text`) | what every request is doing: queued, submitted, generating, with elapsed time and characters so far |
 | `POST /requests/stop?id=` | cancel a running request |
 
@@ -39,7 +38,6 @@ Request phases: `queued`, `submitted`, `thinking` (web only: the page shows the 
 ```bash
 ./run.sh            # creates config.toml from the template on first run, builds, runs doctor, asks, starts tmux
 ./openmini doctor   # checks alone
-./openmini usage    # quota
 ./openmini status   # request state
 ```
 

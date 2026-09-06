@@ -30,5 +30,5 @@ print('comments:', com); print('chunks:', len(ch), '| DONE:', '[DONE]' in data)
 print('text:', repr(''.join(c['choices'][0]['delta'].get('content','') for c in ch)))
 PY
 echo "=== 3. quota for this model ==="
-curl -s -m 60 "$B/usage?format=text" | grep "^agyapi: ${MODEL#agyapi/} "
+curl -s -m 60 -X POST "$B/usage/refresh?backend=agyapi" | grep -o "\"${MODEL#agyapi/}\""
 rm -rf "$T"

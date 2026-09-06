@@ -32,7 +32,7 @@ func main() {
         a.Version = version
         a.Desc = "OpenAI-compatible endpoint over the Gemini web app and the Antigravity CLI"
     })
-    app.Add(serveCmd(), usageCmd(), statusCmd(), doctorCmd(), initCmd())
+    app.Add(serveCmd(), statusCmd(), doctorCmd(), initCmd())
     app.Run(nil)
 }
 
@@ -119,20 +119,6 @@ func serverGet(path string) (string, error) {
     return string(b), nil
 }
 
-func usageCmd() *gcli.Command {
-    return &gcli.Command{
-        Name: "usage", Desc: "show remaining quota per backend (from the running server)",
-        Config: withConfigOpt,
-        Func: func(c *gcli.Command, _ []string) error {
-            out, err := serverGet("/usage?format=text")
-            if err != nil {
-                return err
-            }
-            fmt.Print(out)
-            return nil
-        },
-    }
-}
 
 func statusCmd() *gcli.Command {
     return &gcli.Command{

@@ -69,7 +69,8 @@ func (s *Server) Listen() error {
         return err
     })
     app.Use(s.auth)
-    app.Get("/", func(c *fiber.Ctx) error {
+    app.Get("/", func(c *fiber.Ctx) error { return c.Redirect("/usage", 302) })
+    app.Get("/usage", func(c *fiber.Ctx) error {
         c.Set("Content-Type", "text/html; charset=utf-8")
         return c.SendString(uiHTML)
     })
@@ -82,8 +83,6 @@ func (s *Server) Listen() error {
     app.Get("/v1/models", s.handleModels)
     app.Post("/v1/chat/completions", s.handleChat)
     app.Post("/tools/policy-bisect", s.handlePolicyBisect)
-    app.Get("/usage", s.handleUsage)
-    app.Get("/v1/usage", s.handleUsage)
     if s.webDebug != nil {
         app.Get("/debug/web/html", func(c *fiber.Ctx) error {
             h, err := s.webDebug.HTML()
@@ -299,53 +298,6 @@ func (s *Server) handleUsageRefresh(c *fiber.Ctx) error {
     return c.JSON(out)
 }
 
-func (s *Server) handleUsage(c *fiber.Ctx) error {
-    out := fiber.Map{}
-    var text strings.Builder
-    for name, b := range s.backends {
-        u, err := b.Usage()
-        e := usageEntry{At: time.Now().Format(time.RFC3339)}
-        if err != nil {
-            e.Error = err.Error()
-        } else {
-            e.Data = u
-        }
-        s.usageMu.Lock()
-        s.usageCache[name] = e
-        s.usageMu.Unlock()
-        if err != nil {
-            out[name] = fiber.Map{"error": err.Error()}
-            fmt.Fprintf(&text, "%s: %s\n", name, err.Error())
-            continue
-        }
-        out[name] = u
-        switch v := u.(type) {
-        case map[string]any:
-            keys := make([]string, 0, len(v))
-            for k := range v {
-                keys = append(keys, k)
-            }
-            sort.Strings(keys)
-            for _, k := range keys {
-                fmt.Fprintf(&text, "%s: %-14s %v\n", name, k, v[k])
-            }
-        default:
-            b, _ := json.Marshal(v)
-            var rows []map[string]string
-            if json.Unmarshal(b, &rows) == nil {
-                for _, r := range rows {
-                    fmt.Fprintf(&text, "%s: %-24s %-28s %5s   resets %s\n", name, r["pool"], r["window"], r["remaining"], r["resets_in"])
-                }
-            }
-        }
-    }
-    if c.Query("format") == "text" {
-        c.Set("Content-Type", "text/plain; charset=utf-8")
-        return c.SendString(text.String())
-    }
-    out["checked_at"] = time.Now().Format(time.RFC3339)
-    return c.JSON(out)
-}
 
 // ---------------------------------------------------------------------------
 // Chat completions
