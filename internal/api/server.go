@@ -84,6 +84,21 @@ func (s *Server) Listen() error {
     app.Get("/v1/models", s.handleModels)
     app.Post("/v1/chat/completions", s.handleChat)
     app.Post("/tools/policy-bisect", s.handlePolicyBisect)
+    app.Get("/debug/agyapi/quota", func(c *fiber.Ctx) error {
+        b, ok := s.backends["agyapi"]
+        if !ok {
+            return c.Status(404).JSON(fiber.Map{"error": "agyapi not enabled"})
+        }
+        q, ok := b.(interface{ RawQuota() (map[string]any, error) })
+        if !ok {
+            return c.Status(500).JSON(fiber.Map{"error": "no raw quota"})
+        }
+        out, err := q.RawQuota()
+        if err != nil {
+            return c.Status(502).JSON(fiber.Map{"error": err.Error()})
+        }
+        return c.JSON(out)
+    })
     if s.webDebug != nil {
         app.Get("/debug/web/html", func(c *fiber.Ctx) error {
             h, err := s.webDebug.HTML()

@@ -64,7 +64,6 @@
 <main>
   <div class="row" id="tiles"></div>
   <div class="row reqs" id="req"></div>
-  <div class="more" id="more"></div>
 </main>
 <script>
 const BACKENDS = ['web','agy','agyapi'];
@@ -117,11 +116,11 @@ function tile(name){
   else if(e.error) body=`<div class="msg bad">${esc(e.error)}</div>`;
   else if(name==='web'){
     const d=e.data||{}; const cu=pct(d.current_used), wu=pct(d.weekly_used);
-    const wins=[]; if(cu!=null) wins.push({name:'5-hour window', left:100-cu, resets:whenOf(d.current_resets)}); if(wu!=null) wins.push({name:'Weekly', left:100-wu, resets:whenOf(d.weekly_resets)});
-    body=facts(wins, d.current_model?`model ${esc(d.current_model)}`:'');
+    const wins=[]; if(cu!=null) wins.push({group:'5-hour', win:'', left:100-cu, resets:whenOf(d.current_resets)}); if(wu!=null) wins.push({group:'Weekly', win:'', left:100-wu, resets:whenOf(d.weekly_resets)});
+    body=wins.length?rings(wins):`<div class="msg">no usage read</div>`;
     const notes=d.entry_notes; const noteTxt=!notes?'':Array.isArray(notes)?notes.join(' '):typeof notes==='object'?Object.values(notes).join(' '):String(notes);
     const until=/(\d{1,2}月\d{1,2}日)?\s*(上午|下午)?\s*\d{1,2}:\d{2}/.exec(noteTxt); // e.g. 用量額度將於 9月7日 上午1:40 重設
-    const locked=(d.unavailable&&d.unavailable.length)?`<span class="badfg">locked: ${esc(d.unavailable.join(', '))}${until?` · until ${whenOf(until[0])}`:''}</span>`:'<span>locked models: none</span>';
+    const locked=(d.unavailable&&d.unavailable.length)?`<span class="badfg">locked: ${esc(d.unavailable.join(', '))}${until?` · until ${whenOf(until[0])}`:''}</span>`:'<span></span>';
     foot=`${locked}<span class="mono">updated ${clockOf(e.at)}</span>`;
     if(d.panel_error) body+=`<div class="msg bad">${esc(d.panel_error)}</div>`;
   } else {
@@ -130,14 +129,17 @@ function tile(name){
     foot=`<span></span><span class="mono">updated ${clockOf(e.at)}</span>`;
   }
   const busy=e&&e.loading;
-  return `<div class="tile"><div class="th"><div class="n"><span class="dot ${dot}"></span><span class="name big">${name}</span><span class="sub">${SUB[name]}</span></div>
+  const sub=SUB[name]+(name==='web'&&e&&e.data&&e.data.current_model?` · ${esc(e.data.current_model)}`:'');
+  return `<div class="tile"><div class="th"><div class="n"><span class="dot ${dot}"></span><span class="name big">${name}</span><span class="sub">${sub}</span></div>
     <button onclick="refresh('${name}')" ${busy?'disabled':''}>${busy?'Refreshing…':'Refresh'}</button></div>${body}${foot?`<div class="foot">${foot}</div>`:''}</div>`;
 }
 // one ring per group (Gemini, Others): the ring is the group's tightest window, every window listed under it
 function rings(wins){
-  const groups=['Gemini','Others'].map(g=>wins.filter(w=>w.group===g)).filter(g=>g.length);
+  const names=[]; for(const w of wins) if(!names.includes(w.group)) names.push(w.group);
+  names.sort((a,b)=>(a==='Gemini'?0:1)-(b==='Gemini'?0:1));
+  const groups=names.map(g=>wins.filter(w=>w.group===g));
   return `<div class="rings">${groups.map(g=>{ const t=g.slice().sort((a,b)=>(a.left??101)-(b.left??101))[0];
-    return `<div class="rc">${ring(t.left,'left')}<div class="lbl">${esc(t.group)}</div>${g.map(w=>`<div class="w mono ${cls(w.left)?cls(w.left)+'fg':''}">${esc(w.win)} ${w.left==null?'?':w.left+'%'} · ${esc(w.resets)}</div>`).join('')}</div>`; }).join('')}</div>`;
+    return `<div class="rc">${ring(t.left,'left')}<div class="lbl">${esc(t.group)}</div>${g.map(w=>`<div class="w mono ${cls(w.left)?cls(w.left)+'fg':''}">${w.win?`${esc(w.win)} ${w.left==null?'?':w.left+'%'} · `:'resets '}${esc(w.resets)}</div>`).join('')}</div>`; }).join('')}</div>`;
 }
 // the ring shows the tightest window; the rest are bars
 function facts(wins, extra){
@@ -168,7 +170,6 @@ function reqBlock(name){
 function render(){
   document.getElementById('tiles').innerHTML=BACKENDS.map(tile).join('');
   document.getElementById('req').innerHTML=BACKENDS.map(reqBlock).join('');
-  document.getElementById('more').textContent=`each block keeps its newest 10 requests since the server started · everything else is in the log, logs/${new Date().toISOString().slice(0,10)}.log`;
   const l=document.getElementById('live'); l.className='live'+(state.live?'':' off'); l.innerHTML=`<span class="d"></span>${state.live?'live':'reconnecting…'}`;
 }
 

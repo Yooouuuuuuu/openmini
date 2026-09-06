@@ -499,6 +499,14 @@ func (a *AgyAPI) Usage() (any, error) {
     return rows, nil
 }
 
+// RawQuota returns the service's quota response as-is, for the debug route.
+func (a *AgyAPI) RawQuota() (map[string]any, error) {
+    if err := a.Ready(); err != nil {
+        return nil, err
+    }
+    return a.call("retrieveUserQuota", map[string]any{"project": a.project})
+}
+
 func str(v any) string {
     if s, ok := v.(string); ok {
         return s
