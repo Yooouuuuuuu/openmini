@@ -460,10 +460,6 @@ func (a *AgyAPI) Usage() (any, error) {
     if err := a.Ready(); err != nil {
         return nil, err
     }
-    out, err := a.call("retrieveUserQuota", map[string]any{"project": a.project})
-    if err != nil {
-        return nil, err
-    }
     type row struct {
         Pool      string `json:"pool"`
         Window    string `json:"window"`
@@ -472,6 +468,38 @@ func (a *AgyAPI) Usage() (any, error) {
         ResetsIn  string `json:"resets_in,omitempty"`
     }
     var rows []row
+    // The summary is what the agy CLI's /usage shows: per model group (Gemini;
+    // Claude and GPT), a weekly and a 5-hour bucket. The per-model call
+    // (retrieveUserQuota) only carries 5-hour buckets and stays as a fallback.
+    if sum, err := a.call("retrieveUserQuotaSummary", map[string]any{"project": a.project}); err == nil {
+        if groups, ok := sum["groups"].([]any); ok {
+            for _, g := range groups {
+                gm, _ := g.(map[string]any)
+                buckets, _ := gm["buckets"].([]any)
+                for _, b := range buckets {
+                    m, _ := b.(map[string]any)
+                    r := row{Pool: str(gm["displayName"]), Window: str(m["displayName"])}
+                    if f, ok := m["remainingFraction"].(float64); ok {
+                        r.Remaining = fmt.Sprintf("%.0f%%", f*100)
+                    }
+                    if rt := str(m["resetTime"]); rt != "" {
+                        r.ResetsAt = rt
+                        if t, err := time.Parse(time.RFC3339, rt); err == nil {
+                            r.ResetsIn = time.Until(t).Round(time.Minute).String()
+                        }
+                    }
+                    rows = append(rows, r)
+                }
+            }
+        }
+    }
+    if len(rows) > 0 {
+        return rows, nil
+    }
+    out, err := a.call("retrieveUserQuota", map[string]any{"project": a.project})
+    if err != nil {
+        return nil, err
+    }
     if buckets, ok := out["buckets"].([]any); ok {
         for _, b := range buckets {
             m, _ := b.(map[string]any)
@@ -499,12 +527,17 @@ func (a *AgyAPI) Usage() (any, error) {
     return rows, nil
 }
 
-// RawQuota returns the service's quota response as-is, for the debug route.
-func (a *AgyAPI) RawQuota() (map[string]any, error) {
+// RawQuota returns a quota method's response as-is, for the debug route.
+// method is "retrieveUserQuota" (per model, 5-hour buckets) or
+// "retrieveUserQuotaSummary" (per model group, weekly and 5-hour).
+func (a *AgyAPI) RawQuota(method string) (map[string]any, error) {
     if err := a.Ready(); err != nil {
         return nil, err
     }
-    return a.call("retrieveUserQuota", map[string]any{"project": a.project})
+    if method == "" {
+        method = "retrieveUserQuota"
+    }
+    return a.call(method, map[string]any{"project": a.project})
 }
 
 func str(v any) string {

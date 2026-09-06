@@ -89,11 +89,11 @@ func (s *Server) Listen() error {
         if !ok {
             return c.Status(404).JSON(fiber.Map{"error": "agyapi not enabled"})
         }
-        q, ok := b.(interface{ RawQuota() (map[string]any, error) })
+        q, ok := b.(interface{ RawQuota(string) (map[string]any, error) })
         if !ok {
             return c.Status(500).JSON(fiber.Map{"error": "no raw quota"})
         }
-        out, err := q.RawQuota()
+        out, err := q.RawQuota(c.Query("method"))
         if err != nil {
             return c.Status(502).JSON(fiber.Map{"error": err.Error()})
         }
