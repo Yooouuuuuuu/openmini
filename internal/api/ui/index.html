@@ -27,12 +27,15 @@
   button.stop { color:var(--badfg); background:var(--stopbg); border-color:var(--stopline); font-weight:500; height:26px; padding:0 10px }
   button.all { height:34px; padding:0 14px; font-size:13px; font-weight:500 }
   main { padding:18px 24px 28px; display:flex; flex-direction:column; gap:16px }
-  .row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px } @media (max-width:860px){ .row { grid-template-columns:1fr } }
+  .row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px } @media (max-width:860px){ .row { grid-template-columns:minmax(0,1fr) } }
   .row.reqs { margin-top:10px }
   .tile { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:14px }
   .th { display:flex; align-items:center; justify-content:space-between; gap:8px } .th .n { display:flex; align-items:center; gap:10px; min-width:0 }
   .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); flex:none } .dot.ok { background:var(--ok) } .dot.bad { background:var(--bad) }
-  .name { font-size:16px; font-weight:600 } .sub { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .lights { display:inline-flex; align-items:center; gap:4px 6px; font-size:12px; color:var(--muted); margin-right:2px } .lights .dot { margin-left:4px } .lights .dot:first-child { margin-left:0 }
+  @media (min-width:861px){ .tile.wide { grid-column:span 2 } }
+  .name { font-size:16px; font-weight:600 } .sub { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0 }
+  .tile { min-width:0 } .rings { min-width:0 }
   .body { display:flex; align-items:center; gap:18px } .ring { position:relative; width:84px; height:84px; border-radius:50%; flex:none }
   .ring i { position:absolute; inset:9px; border-radius:50%; background:var(--card); display:flex; flex-direction:column; align-items:center; justify-content:center }
   .ring b { font-size:20px; font-weight:600; line-height:1 } .ring small { font-size:10px; color:var(--muted); margin-top:3px }
@@ -69,7 +72,9 @@
 </main>
 <script>
 const BACKENDS = ['web','agy','agyapi'];
-const SUB = { web:'Gemini web/app', agy:'Antigravity CLI', agyapi:'Antigravity service, direct' };
+const SUB = { web:'Gemini web/app', antigravity:'one quota for agy and agyapi' };
+// agy and agyapi draw from the same Antigravity quota: one usage tile, read through agyapi (direct) or agy (CLI)
+function agSource(){ if(state.agyapi&&!state.agyapi.error) return 'agyapi'; if(state.agy&&!state.agy.error) return 'agy'; return state.health.agyapi==='ok'||!state.health.agy?'agyapi':'agy'; }
 const state = { health:{}, live:false };
 
 function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -125,7 +130,8 @@ function windowsOf(name, rows){
 }
 
 function tile(name){
-  const e=state[name]; const h=state.health[name]; const dot=h==='ok'?'ok':h?'bad':'';
+  const src=name==='antigravity'?agSource():name;
+  const e=state[src]; const h=state.health[name]; const dot=h==='ok'?'ok':h?'bad':'';
   let body='', foot='';
   if(!e) body=`<div class="msg">Not loaded yet. Press Refresh.</div>`;
   else if(e.error) body=`<div class="msg bad">${esc(e.error)}</div>`;
@@ -139,14 +145,17 @@ function tile(name){
     foot=`${locked}<span class="mono">updated ${clockOf(e.at)}</span>`;
     if(d.panel_error) body+=`<div class="msg bad">${esc(d.panel_error)}</div>`;
   } else {
-    const rows=Array.isArray(e.data)?e.data:[]; const w=windowsOf(name, rows);
+    const rows=Array.isArray(e.data)?e.data:[]; const w=windowsOf(src, rows);
     body=rows.length?rings(w.wins):`<div class="msg">${esc(JSON.stringify(e.data))}</div>`;
     foot=`<span></span><span class="mono">updated ${clockOf(e.at)}</span>`;
   }
   const busy=e&&e.loading;
-  const sub=SUB[name];
-  return `<div class="tile"><div class="th"><div class="n"><span class="dot ${dot}"></span><span class="name big">${name}</span><span class="sub">${sub}</span></div>
-    <button onclick="refresh('${name}')" ${busy?'disabled':''}>${busy?'Refreshing…':'Refresh'}</button></div>${body}${foot?`<div class="foot">${foot}</div>`:''}</div>`;
+  const light=n=>{ const v=state.health[n]; return `<span class="dot ${v==='ok'?'ok':v?'bad':''}"></span>`; };
+  const head=name==='antigravity'
+    ?`<span class="lights">${light('agy')}agy ${light('agyapi')}agyapi</span><span class="name big">antigravity</span><span class="sub">${SUB[name]}</span>`
+    :`<span class="dot ${dot}"></span><span class="name big">${name}</span><span class="sub">${SUB[name]}</span>`;
+  return `<div class="tile ${name==='antigravity'?'wide':''}"><div class="th"><div class="n">${head}</div>
+    <button onclick="refresh('${name==='antigravity'?src:name}')" ${busy?'disabled':''}>${busy?'Refreshing…':'Refresh'}</button></div>${body}${foot?`<div class="foot">${foot}</div>`:''}</div>`;
 }
 // one ring per group (Gemini, Others): the ring is the group's tightest window, every window listed under it
 // per group: the big wheel is the weekly limit, the little one on its shoulder the 5-hour limit
@@ -185,7 +194,7 @@ function reqBlock(name){
     ${active.map(runCard).join('')}${rows||'<div class="msg">no requests yet</div>'}</div>`;
 }
 function render(){
-  document.getElementById('tiles').innerHTML=BACKENDS.map(tile).join('');
+  document.getElementById('tiles').innerHTML=['web','antigravity'].map(tile).join('');
   document.getElementById('req').innerHTML=BACKENDS.map(reqBlock).join('');
 }
 
@@ -195,7 +204,7 @@ async function refresh(name){
   catch(e){ state[name]={error:String(e)}; }
   render();
 }
-async function refreshAll(){ const b=document.getElementById('all'); b.disabled=true; await Promise.all(BACKENDS.map(refresh)); await loadRequests(); b.disabled=false; }
+async function refreshAll(){ const b=document.getElementById('all'); b.disabled=true; await Promise.all(['web',agSource()].map(refresh)); await loadRequests(); b.disabled=false; }
 async function loadRequests(){ try{ state.requests=await (await fetch('status')).json(); }catch(e){ state.requests=null; } render(); }
 // The server pushes the status whenever a request changes; nothing is polled.
 function listen(){
