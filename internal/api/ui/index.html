@@ -72,7 +72,7 @@
 </main>
 <script>
 const BACKENDS = ['web','agy','agyapi'];
-const SUB = { web:'Gemini web/app', antigravity:'one quota for agy and agyapi' };
+const SUB = { web:'Gemini web/app', antigravity:'agy/agyapi' };
 // agy and agyapi draw from the same Antigravity quota: one usage tile, read through agyapi (direct) or agy (CLI)
 function agSource(){ if(state.agyapi&&!state.agyapi.error) return 'agyapi'; if(state.agy&&!state.agy.error) return 'agy'; return state.health.agyapi==='ok'||!state.health.agy?'agyapi':'agy'; }
 const state = { health:{}, live:false };
@@ -150,9 +150,10 @@ function tile(name){
     foot=`<span></span><span class="mono">updated ${clockOf(e.at)}</span>`;
   }
   const busy=e&&e.loading;
-  const light=n=>{ const v=state.health[n]; return `<span class="dot ${v==='ok'?'ok':v?'bad':''}"></span>`; };
+  // one light for the pair: green when both answer, red when either does not
+  const ag=[state.health.agy,state.health.agyapi]; const agDot=ag.every(v=>v==='ok')?'ok':ag.some(v=>v&&v!=='ok')?'bad':'';
   const head=name==='antigravity'
-    ?`<span class="lights">${light('agy')}agy ${light('agyapi')}agyapi</span><span class="name big">antigravity</span><span class="sub">${SUB[name]}</span>`
+    ?`<span class="dot ${agDot}" title="agy: ${esc(ag[0]||'?')} · agyapi: ${esc(ag[1]||'?')}"></span><span class="name big">antigravity</span><span class="sub">${SUB[name]}</span>`
     :`<span class="dot ${dot}"></span><span class="name big">${name}</span><span class="sub">${SUB[name]}</span>`;
   return `<div class="tile ${name==='antigravity'?'wide':''}"><div class="th"><div class="n">${head}</div>
     <button onclick="refresh('${name==='antigravity'?src:name}')" ${busy?'disabled':''}>${busy?'Refreshing…':'Refresh'}</button></div>${body}${foot?`<div class="foot">${foot}</div>`:''}</div>`;
