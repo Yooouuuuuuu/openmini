@@ -87,6 +87,17 @@ function whenOf(s){
   if(t){ let h=+t[2]; const ap=(t[1]||t[4]||'').toLowerCase(); const pm=ap==='下午'||ap==='pm'; const am=ap==='上午'||ap==='am'; if(pm&&h<12)h+=12; if(am&&h===12)h=0; out+=String(h).padStart(2,'0')+':'+t[3]; }
   return out.trim()||esc(s);
 }
+// the Gemini app gives reset times as clock text ("下午12:40", "9月10日 下午12:40"); turn them into time left
+function dateOf(s){
+  s=String(s||''); const d=/(\d{1,2})月(\d{1,2})日/.exec(s); const t=/(上午|下午|AM|PM|am|pm)?\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?/.exec(s);
+  if(!t) return null;
+  let h=+t[2]; const ap=(t[1]||t[4]||'').toLowerCase(); if((ap==='下午'||ap==='pm')&&h<12)h+=12; if((ap==='上午'||ap==='am')&&h===12)h=0;
+  const now=new Date(); const r=new Date(now.getFullYear(), d?+d[1]-1:now.getMonth(), d?+d[2]:now.getDate(), h, +t[3], 0, 0);
+  if(r<now){ if(!d) r.setDate(r.getDate()+1); else if(now-r>7*864e5) r.setFullYear(r.getFullYear()+1); }
+  return r;
+}
+function leftUntil(s){ const r=dateOf(s); if(!r) return whenOf(s); const m=Math.max(0,Math.round((r-Date.now())/6e4)); const h=Math.floor(m/60);
+  if(h>=24) return Math.floor(h/24)+'d '+(h%24)+'h'; if(h) return h+'h '+(m%60)+'m'; return m+'m'; }
 function cls(left){ return left==null?'':left<=10?'bad':left<=30?'warn':''; }
 function ring(left,label){ const l=left==null?0:Math.max(0,Math.min(100,left)); const col=left==null?'var(--track)':left<=10?'var(--bad)':left<=30?'var(--warn)':'var(--accent)';
   return `<div class="ring" style="background:conic-gradient(${col} 0 ${l}%, var(--track) ${l}% 100%)"><i><b class="big mono">${left==null?'—':left+'%'}</b><small>${esc(label||'left')}</small></i></div>`; }
@@ -116,7 +127,7 @@ function tile(name){
   else if(e.error) body=`<div class="msg bad">${esc(e.error)}</div>`;
   else if(name==='web'){
     const d=e.data||{}; const cu=pct(d.current_used), wu=pct(d.weekly_used);
-    const wins=[]; if(wu!=null) wins.push({group:'Gemini', win:'Weekly', left:100-wu, resets:whenOf(d.weekly_resets)}); if(cu!=null) wins.push({group:'Gemini', win:'5-hour', left:100-cu, resets:whenOf(d.current_resets)});
+    const wins=[]; if(wu!=null) wins.push({group:'Gemini', win:'Weekly', left:100-wu, resets:leftUntil(d.weekly_resets)}); if(cu!=null) wins.push({group:'Gemini', win:'5-hour', left:100-cu, resets:leftUntil(d.current_resets)});
     body=wins.length?rings(wins):`<div class="msg">no usage read</div>`;
     const notes=d.entry_notes; const noteTxt=!notes?'':Array.isArray(notes)?notes.join(' '):typeof notes==='object'?Object.values(notes).join(' '):String(notes);
     const until=/(\d{1,2}月\d{1,2}日)?\s*(上午|下午)?\s*\d{1,2}:\d{2}/.exec(noteTxt); // e.g. 用量額度將於 9月7日 上午1:40 重設
