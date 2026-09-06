@@ -24,7 +24,7 @@ chunk acknowledges the request and `: openmini phase=...` comments report submit
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /usage` | the dashboard: one tile per backend with its own Refresh button, running requests with Stop; nothing is fetched on open except cached values (`/` redirects here) |
+| `GET /usage` | the dashboard: usage wheels for the Gemini app and for Antigravity (agy and agyapi share one quota), each with its own Refresh button; running requests with Stop and the newest 10 per backend; nothing is fetched on open except cached values (`/` redirects here) |
 | `GET /usage/cached`, `POST /usage/refresh?backend=` | the cache behind that page; refresh asks one backend |
 | `POST /v1/chat/completions` | OpenAI chat completions |
 | `GET /v1/models` | all backend models, prefixed |
@@ -33,7 +33,7 @@ chunk acknowledges the request and `: openmini phase=...` comments report submit
 | `GET /status/stream` | the same, pushed as server-sent events whenever a request changes; what the dashboard listens to (no polling) |
 | `POST /requests/stop?id=` | cancel a running request |
 
-Request phases: `queued`, `submitted`, `thinking` (web only: the page shows the model thinking and no text yet), `generating`, then `finished`, `failed` or `stopped`. The dashboard at `/` shows them as a timeline with a Stop button.
+Request phases: `queued`, `submitted`, `thinking` (web only: the page shows the model thinking and no text yet), `generating`, then `finished`, `failed` or `stopped`. The dashboard at `/usage` shows them with a Stop button.
 | `GET /health` | backend readiness |
 | `GET /debug/web/html`, `/debug/web/screenshot` | the live Gemini page, for fixing selectors |
 
