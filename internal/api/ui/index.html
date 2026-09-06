@@ -41,7 +41,9 @@
   .bar { height:5px; border-radius:3px; background:var(--track); overflow:hidden } .bar i { display:block; height:100%; background:var(--accent) }
   .bar.warn i { background:var(--warn) } .bar.bad i { background:var(--bad) } .warnfg { color:var(--warnfg) } .badfg { color:var(--badfg) }
   .foot { display:flex; justify-content:space-between; gap:8px; font-size:12px; color:var(--muted); border-top:1px solid var(--hair); padding-top:10px; flex-wrap:wrap; margin-top:auto }
-  .models { font-size:11px; color:var(--dim); line-height:1.5; margin-top:2px } .msg { color:var(--muted) } .msg.bad { color:var(--badfg) }
+  .msg { color:var(--muted) } .msg.bad { color:var(--badfg) }
+  .rings { display:flex; justify-content:space-around; gap:12px; padding:4px 0 } .rc { display:flex; flex-direction:column; align-items:center; gap:4px; flex:1; min-width:0 }
+  .rc .ring { margin-bottom:4px } .rc .lbl { font-size:13px; font-weight:500 } .rc .w { font-size:11px; color:var(--muted); white-space:nowrap }
   /* requests */
   .rq { gap:0 } .rq .th { margin-bottom:6px }
   .run { border:1px solid var(--runline); background:var(--card2); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:6px; margin:4px 0 8px }
@@ -99,11 +101,9 @@ function windowsOf(name, rows){
     const pool=String(r.pool||''); const left=pct(r.remaining); const resets=r.resets_in?dur(r.resets_in):(r.resets_at?whenOf(r.resets_at):'');
     let win=String(r.window||'').replace(/limit remaining/i,'').replace(/^WTUS$/i,'5-hour').replace(/five hour/i,'5-hour').trim()||'5-hour';
     if(/^chat_|^tab_/.test(pool)){ internal++; continue; }
-    let group;
-    if(name==='agy') group=/claude|gpt/i.test(pool)?'Claude/GPT':'Gemini';
-    else { group=/claude|gpt/i.test(pool)?'Claude/GPT pool':'Gemini pool'; models.push(pool); }
+    const group=/claude|gpt/i.test(pool)?'Others':'Gemini'; if(name==='agyapi') models.push(pool);
     const key=group+'|'+win;
-    if(!seen[key]){ seen[key]={name:group+' · '+win, left, resets, n:0, rank:/^gemini/i.test(group)?0:1}; wins.push(seen[key]); }
+    if(!seen[key]){ seen[key]={group, win, name:group+' · '+win, left, resets, n:0, rank:group==='Gemini'?0:1}; wins.push(seen[key]); }
     seen[key].n++;
     if(left!=null && (seen[key].left==null || left<seen[key].left)) seen[key].left=left;
   }
@@ -119,17 +119,25 @@ function tile(name){
     const d=e.data||{}; const cu=pct(d.current_used), wu=pct(d.weekly_used);
     const wins=[]; if(cu!=null) wins.push({name:'5-hour window', left:100-cu, resets:whenOf(d.current_resets)}); if(wu!=null) wins.push({name:'Weekly', left:100-wu, resets:whenOf(d.weekly_resets)});
     body=facts(wins, d.current_model?`model ${esc(d.current_model)}`:'');
-    const locked=(d.unavailable&&d.unavailable.length)?`<span class="badfg">locked: ${esc(d.unavailable.join(', '))}</span>`:'<span>locked models: none</span>';
+    const notes=d.entry_notes; const noteTxt=!notes?'':Array.isArray(notes)?notes.join(' '):typeof notes==='object'?Object.values(notes).join(' '):String(notes);
+    const until=/(\d{1,2}月\d{1,2}日)?\s*(上午|下午)?\s*\d{1,2}:\d{2}/.exec(noteTxt); // e.g. 用量額度將於 9月7日 上午1:40 重設
+    const locked=(d.unavailable&&d.unavailable.length)?`<span class="badfg">locked: ${esc(d.unavailable.join(', '))}${until?` · until ${whenOf(until[0])}`:''}</span>`:'<span>locked models: none</span>';
     foot=`${locked}<span class="mono">updated ${clockOf(e.at)}</span>`;
     if(d.panel_error) body+=`<div class="msg bad">${esc(d.panel_error)}</div>`;
   } else {
     const rows=Array.isArray(e.data)?e.data:[]; const w=windowsOf(name, rows);
-    body=rows.length?facts(w.wins, ''):`<div class="msg">${esc(JSON.stringify(e.data))}</div>`;
+    body=rows.length?rings(w.wins):`<div class="msg">${esc(JSON.stringify(e.data))}</div>`;
     foot=`<span></span><span class="mono">updated ${clockOf(e.at)}</span>`;
   }
   const busy=e&&e.loading;
   return `<div class="tile"><div class="th"><div class="n"><span class="dot ${dot}"></span><span class="name big">${name}</span><span class="sub">${SUB[name]}</span></div>
     <button onclick="refresh('${name}')" ${busy?'disabled':''}>${busy?'Refreshing…':'Refresh'}</button></div>${body}${foot?`<div class="foot">${foot}</div>`:''}</div>`;
+}
+// one ring per group (Gemini, Others): the ring is the group's tightest window, every window listed under it
+function rings(wins){
+  const groups=['Gemini','Others'].map(g=>wins.filter(w=>w.group===g)).filter(g=>g.length);
+  return `<div class="rings">${groups.map(g=>{ const t=g.slice().sort((a,b)=>(a.left??101)-(b.left??101))[0];
+    return `<div class="rc">${ring(t.left,'left')}<div class="lbl">${esc(t.group)}</div>${g.map(w=>`<div class="w mono ${cls(w.left)?cls(w.left)+'fg':''}">${esc(w.win)} ${w.left==null?'?':w.left+'%'} · ${esc(w.resets)}</div>`).join('')}</div>`; }).join('')}</div>`;
 }
 // the ring shows the tightest window; the rest are bars
 function facts(wins, extra){
