@@ -12,7 +12,9 @@ type Phase string
 const (
     Queued     Phase = "queued"     // waiting for the backend to be free
     Submitted  Phase = "submitted"  // prompt delivered, waiting for the reply to start
-    Generating Phase = "generating" // reply is being produced
+    Generating Phase = "generating"
+    Thinking Phase = "thinking"
+    Stopped Phase = "stopped" // reply is being produced
     Finished   Phase = "finished"
     Failed     Phase = "failed"
 )

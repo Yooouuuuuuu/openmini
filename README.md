@@ -29,6 +29,8 @@ chunk acknowledges the request and `: openmini phase=...` comments report submit
 | `GET /usage` (`?format=text`) | remaining quota per backend |
 | `GET /status` (`?format=text`) | what every request is doing: queued, submitted, generating, with elapsed time and characters so far |
 | `POST /requests/stop?id=` | cancel a running request |
+
+Request phases: `queued`, `submitted`, `thinking` (web only: the page shows the model thinking and no text yet), `generating`, then `finished`, `failed` or `stopped`. The dashboard at `/` shows them as a timeline with a Stop button.
 | `GET /health` | backend readiness |
 | `GET /debug/web/html`, `/debug/web/screenshot` | the live Gemini page, for fixing selectors |
 

@@ -233,7 +233,6 @@ func (s *Server) handleModels(c *fiber.Ctx) error {
     }
     sort.Strings(names)
     for _, n := range names {
-        data = append(data, fiber.Map{"id": n + "/default", "object": "model", "created": s.started.Unix(), "owned_by": "openmini"})
         for _, m := range s.backends[n].Models() {
             data = append(data, fiber.Map{"id": n + "/" + m, "object": "model", "created": s.started.Unix(), "owned_by": "openmini"})
         }
@@ -521,6 +520,9 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
                 reply += "\n"
             }
             reply += "[openmini/" + b.Name() + "] " + err.Error()
+        }
+        if note == "stopped by request" || strings.HasSuffix(note, ": stopped by request") {
+            phase = state.Stopped
         }
         s.st.Finish(id, phase, backend.Chars(reply), note)
         s.log.Printf("%s done in %.1fs phase=%s reply=%d chars usage=%v", id, time.Since(t0).Seconds(), phase, backend.Chars(reply), res.Usage)

@@ -116,6 +116,8 @@ type Web struct {
 
     streamMu   sync.Mutex
     lastStream []byte // body of the last StreamGenerate response seen on the page
+    reqID      string    // request in flight, for stream timing logs
+    reqStart   time.Time
     streamURL  string
 
     usageMu   sync.Mutex
@@ -309,7 +311,11 @@ func (w *Web) Start() error {
             }
             w.streamMu.Lock()
             w.lastStream, w.streamURL = body, u
+            id, start := w.reqID, w.reqStart
             w.streamMu.Unlock()
+            if id != "" {
+                w.logf("web: %s stream complete after %.1fs (%d bytes)", id, time.Since(start).Seconds(), len(body))
+            }
         }()
     })
     if _, err = w.page.Goto(geminiURL, pw.PageGotoOptions{WaitUntil: pw.WaitUntilStateDomcontentloaded}); err != nil {
@@ -338,15 +344,38 @@ func (w *Web) Start() error {
 // prompt: the box is present and no usage view or dialog is open.
 func (w *Web) chatTabHealthy() bool {
     if !w.exists(w.page.Locator(promptBoxSel)) {
+        w.logf("web: chat tab has no prompt box")
         return false
     }
-    if w.exists(w.page.Locator("usage-metrics-window, mat-dialog-container")) {
+    if w.exists(w.page.Locator("usage-metrics-window")) {
+        w.logf("web: chat tab is showing the usage panel")
+        return false
+    }
+    if w.exists(w.page.Locator("mat-dialog-container:visible")) {
+        w.logf("web: chat tab has a dialog open")
         return false
     }
     if t, err := w.page.Title(); err == nil && (t == "用量" || strings.Contains(strings.ToLower(t), "usage")) {
+        w.logf("web: chat tab title is %q", t)
         return false
     }
     return true
+}
+
+// thinkingChars is the length of the thoughts the page shows while the model
+// is still thinking, 0 when there is no thinking panel.
+func (w *Web) thinkingChars() int {
+    raw, err := w.page.Evaluate(`() => { const e = document.querySelector("[data-test-id='thinking-overlay-content'], thinking-overlay"); return e ? (e.innerText || "").length : 0 }`, nil)
+    if err != nil {
+        return 0
+    }
+    if f, ok := raw.(float64); ok {
+        return int(f)
+    }
+    if n, ok := raw.(int); ok {
+        return n
+    }
+    return 0
 }
 
 // Reload forces the chat tab back to a fresh app page. Used after a request
@@ -673,6 +702,9 @@ func (w *Web) Complete(c backend.Call) (backend.Result, error) {
     if w.desiredModel == "" {
         w.desiredModel = w.cfg.Model
     }
+    w.streamMu.Lock()
+    w.reqID, w.reqStart = c.ID, time.Now()
+    w.streamMu.Unlock()
     attempts := 1 + w.cfg.Retries
     for i := 1; ; i++ {
         text, err := w.ask(c)
@@ -827,6 +859,8 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
     lastChange := time.Now()
     short := pw.Float(2000)
     opened := time.Now()
+    lastPhase := time.Time{}
+    textAt := time.Time{}
     gone := time.Time{}
     noText := 2 * time.Duration(w.cfg.StartTimeout) * time.Second
     if noText <= 0 {
@@ -853,6 +887,12 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
                 if html, ok := raw.(string); ok {
                     txt := w.markdownOf(html)
                     if txt != last {
+                        if last == "" && txt != "" {
+                            textAt = time.Now()
+                            if c.OnPhase != nil {
+                                c.OnPhase("generating", fmt.Sprintf("thought for %ds", int(textAt.Sub(opened).Seconds())))
+                            }
+                        }
                         last, lastChange = txt, time.Now()
                         if c.OnText != nil {
                             c.OnText(txt)
@@ -862,8 +902,23 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
             }
             busy, _ := reply.GetAttribute("aria-busy", pw.LocatorGetAttributeOptions{Timeout: short})
             generating := w.exists(w.page.Locator(busyIconSel))
+            // While nothing is rendered yet the model is usually thinking: say so
+            // every few seconds so the request does not look unsent.
+            if last == "" && c.OnPhase != nil && time.Since(lastPhase) > 3*time.Second &&
+                w.exists(w.page.Locator("thinking-dots-animation, thinking-overlay")) {
+                note := fmt.Sprintf("for %ds", int(time.Since(opened).Seconds()))
+                if n := w.thinkingChars(); n > 100 {
+                    note += fmt.Sprintf(", %d chars of thoughts so far", n)
+                }
+                c.OnPhase("thinking", note)
+                lastPhase = time.Now()
+            }
             if busy != "true" && !generating && last != "" && time.Since(lastChange) > 500*time.Millisecond {
-                w.logf("web: %s reply finished after %.1fs (%d chars)", c.ID, time.Since(t0).Seconds(), backend.Chars(last))
+                thought := 0.0
+                if !textAt.IsZero() {
+                    thought = textAt.Sub(opened).Seconds()
+                }
+                w.logf("web: %s reply finished after %.1fs (%d chars; thought %.0fs, wrote %.0fs)", c.ID, time.Since(t0).Seconds(), backend.Chars(last), thought, time.Since(opened).Seconds()-thought)
                 if w.cfg.ReplySource == "raw" {
                     // the network capture may lag the render by a moment
                     for i := 0; i < 20; i++ {

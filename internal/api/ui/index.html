@@ -4,177 +4,179 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>openmini</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-  :root {
-    --bg:#f4f5f7; --card:#fff; --fg:#1c2128; --muted:#6b7480; --line:#e3e6ea; --hair:#eef0f3;
-    --ok:#1f9d55; --bad:#b42318; --warn:#b7791f; --accent:#2457c5; --accentbg:#2457c5;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#0f1115; --card:#171a21; --fg:#e6e8eb; --muted:#9aa3ad; --line:#262b34; --hair:#20242c;
-      --ok:#4ade80; --bad:#f87171; --warn:#fbbf24; --accent:#6ea0ff; --accentbg:#2f5fd0; }
-  }
+  :root { color-scheme: dark;
+    --bg:#0e1116; --card:#141922; --card2:#131a28; --fg:#e7eaee; --muted:#8a93a0; --dim:#5f6873; --line:#222a35; --hair:#1f242c;
+    --track:#232b37; --ok:#34c46a; --bad:#ff6b60; --badfg:#ff8a80; --warn:#d99a2b; --warnfg:#e3b04b; --accent:#5b8def; --accentfg:#8ab4ff;
+    --btn:#171c24; --btnline:#2c3441; --stopbg:#2a1717; --stopline:#5a2a2a; --runline:#2a4a8a; --pill:#1c2536; --halo:#1c2f52; }
+  @media (prefers-color-scheme: light) { :root { color-scheme: light;
+    --bg:#f3f4f6; --card:#ffffff; --card2:#f4f7fd; --fg:#1c2128; --muted:#6b7480; --dim:#9aa3ad; --line:#e3e6ea; --hair:#eef0f3;
+    --track:#e9ecf0; --ok:#1f9d55; --bad:#c62d1f; --badfg:#b42318; --warn:#d99a2b; --warnfg:#a56f12; --accent:#2457c5; --accentfg:#2457c5;
+    --btn:#ffffff; --btnline:#d5d9df; --stopbg:#fff3f2; --stopline:#f0c4c0; --runline:#9db6ea; --pill:#e8effc; --halo:#dbe6fb; } }
   * { box-sizing:border-box }
-  body { margin:0; background:var(--bg); color:var(--fg);
-    font:14px/1.5 "IBM Plex Sans",-apple-system,"Segoe UI",Roboto,"Noto Sans TC",system-ui,sans-serif; }
-  .mono { font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums; }
-  header { display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap;
-    padding:14px 22px; background:var(--card); border-bottom:1px solid var(--line); }
-  header .left { display:flex; align-items:baseline; gap:14px }
-  header h1 { margin:0; font-size:17px; font-weight:600; letter-spacing:.2px }
-  header .base { color:var(--muted); font-size:12px }
-  header .health { display:flex; gap:16px; font-size:12px; color:var(--muted) }
-  header .health b { font-weight:400 } .dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:5px; background:var(--muted) }
-  .dot.ok { background:var(--ok) } .dot.bad { background:var(--bad) }
-  .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px 22px 0 }
-  .toolbar .hint { color:var(--muted); font-size:12px }
-  .btns { display:flex; gap:8px; flex-wrap:wrap }
-  button { cursor:pointer; font:inherit; font-size:13px; border:1px solid var(--line); background:var(--card); color:var(--fg);
-    border-radius:6px; height:32px; padding:0 12px; }
-  button:hover:not([disabled]) { border-color:var(--accent) }
-  button[disabled] { opacity:.5; cursor:default }
-  button.primary { background:var(--accentbg); border-color:var(--accentbg); color:#fff; font-weight:500 }
-  button.small { height:28px; padding:0 10px; font-size:12px }
-  button.danger { color:var(--bad); font-weight:500 }
-  main { padding:14px 22px 28px; display:grid; gap:16px; grid-template-columns:repeat(3,minmax(0,1fr)); }
-  @media (max-width:1080px){ main { grid-template-columns:1fr } }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; display:flex; flex-direction:column; gap:14px; }
-  .card > .head { display:flex; align-items:baseline; justify-content:space-between }
-  .card .name { font-size:14px; font-weight:600 } .card .tag { font-size:12px; color:var(--muted) }
-  .pool { display:flex; flex-direction:column; gap:6px }
-  .pool .title { font-size:13px; font-weight:500 }
-  .line { display:flex; justify-content:space-between; font-size:13px } .line .k { color:var(--muted) }
-  .bar { height:6px; border-radius:3px; background:var(--hair); overflow:hidden } .bar > i { display:block; height:100% ; background:var(--accent) }
-  .bar.warn > i { background:var(--warn) } .bar.bad > i { background:var(--bad) }
-  .sub { font-size:12px; color:var(--muted); line-height:1.5 }
-  .foot { display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--hair); padding-top:10px; margin-top:2px; }
-  .foot .when { font-size:11px; color:var(--muted) }
-  .msg { color:var(--muted) } .msg.bad { color:var(--bad) }
-  section.req { grid-column:1/-1; }
-  table { width:100%; border-collapse:collapse; font-size:13px } th,td { text-align:left; padding:7px 8px; border-top:1px solid var(--hair) } th { color:var(--muted); font-weight:400; border-top:0 }
-  td.num, th.num { text-align:right } .phase { display:inline-flex; align-items:center; gap:6px }
-  .pdot { width:8px; height:8px; border-radius:50%; display:inline-block } .p-generating{background:var(--accent)} .p-submitted{background:var(--warn)} .p-queued{background:var(--muted)} .p-finished{background:var(--ok)} .p-failed{background:var(--bad)}
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 "IBM Plex Sans",-apple-system,"Segoe UI",Roboto,"Noto Sans TC",system-ui,sans-serif; }
+  .mono { font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums }
+  .big { font-family:"Inter Tight","IBM Plex Sans",system-ui,sans-serif; letter-spacing:-.02em }
+  header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px 24px; border-bottom:1px solid var(--hair) }
+  header .l { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap } header h1 { margin:0; font-size:18px; font-weight:600 }
+  header .base { font-size:12px; color:var(--muted) } header .r { display:flex; align-items:center; gap:12px } header .hint { font-size:12px; color:var(--muted) }
+  button { cursor:pointer; font:inherit; font-size:12px; height:30px; padding:0 12px; border:1px solid var(--btnline); background:var(--btn); color:var(--fg); border-radius:8px }
+  button:hover:not([disabled]) { border-color:var(--accent) } button[disabled] { opacity:.5; cursor:default }
+  button.stop { color:var(--badfg); background:var(--stopbg); border-color:var(--stopline); font-weight:500 }
+  button.all { height:34px; padding:0 14px; font-size:13px; font-weight:500 }
+  main { padding:18px 24px 28px; display:flex; flex-direction:column; gap:16px }
+  .tiles { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px } @media (max-width:860px){ .tiles { grid-template-columns:1fr } }
+  .tile, .panel { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:14px }
+  .th { display:flex; align-items:center; justify-content:space-between; gap:8px } .th .n { display:flex; align-items:center; gap:10px; min-width:0 }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); flex:none } .dot.ok { background:var(--ok) } .dot.bad { background:var(--bad) }
+  .name { font-size:16px; font-weight:600 } .sub { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .body { display:flex; align-items:center; gap:18px } .ring { position:relative; width:84px; height:84px; border-radius:50%; flex:none }
+  .ring i { position:absolute; inset:9px; border-radius:50%; background:var(--card); display:flex; flex-direction:column; align-items:center; justify-content:center }
+  .ring b { font-size:20px; font-weight:600; line-height:1 } .ring small { font-size:10px; color:var(--muted); margin-top:3px }
+  .facts { display:flex; flex-direction:column; gap:4px; flex:1; min-width:0 } .facts .t { font-size:13px; font-weight:500 } .facts .m { font-size:12px; color:var(--muted) }
+  .hr { height:1px; background:var(--line); margin:6px 0 } .kv { display:flex; justify-content:space-between; gap:8px; font-size:12px; margin-top:4px } .kv .k { color:var(--muted) }
+  .bar { height:5px; border-radius:3px; background:var(--track); overflow:hidden } .bar i { display:block; height:100%; background:var(--accent) }
+  .bar.warn i { background:var(--warn) } .bar.bad i { background:var(--bad) } .warnfg { color:var(--warnfg) } .badfg { color:var(--badfg) }
+  .foot { display:flex; justify-content:space-between; gap:8px; font-size:12px; color:var(--muted); border-top:1px solid var(--hair); padding-top:10px; flex-wrap:wrap }
+  .models { font-size:11px; color:var(--dim); line-height:1.5; margin-top:2px } .msg { color:var(--muted) } .msg.bad { color:var(--badfg) }
+  .run { border:1px solid var(--runline); background:var(--card2); border-radius:10px; padding:14px 16px; display:flex; flex-direction:column; gap:10px }
+  .run .top { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap } .run .id { display:flex; align-items:center; gap:12px; flex-wrap:wrap }
+  .pill { font-size:12px; padding:2px 8px; border-radius:6px; background:var(--pill); color:var(--accentfg) } .timer { font-size:18px; font-weight:600 }
+  .steps { display:flex; align-items:center; flex-wrap:wrap; gap:6px 0 } .step { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--dim); white-space:nowrap }
+  .step .d { width:8px; height:8px; border-radius:50%; background:var(--btnline) } .step.done { color:var(--muted) } .step.done .d { background:var(--ok) }
+  .step.now { color:var(--fg); font-weight:500 } .step.now .d { background:var(--accentfg); box-shadow:0 0 0 4px var(--halo) } .steps .ln { flex:1; min-width:10px; height:1px; background:var(--btnline); margin:0 10px }
+  table { width:100%; border-collapse:collapse; font-size:13px } th,td { text-align:left; padding:7px 8px; border-top:1px solid var(--hair); vertical-align:top } th { color:var(--muted); font-weight:400; font-size:12px; border-top:0; padding-top:0 }
+  .num { text-align:right } .res { display:inline-flex; align-items:center; gap:6px; white-space:nowrap } .note { color:var(--muted); word-break:break-word }
+  .tw { overflow-x:auto }
 </style>
 </head>
 <body>
 <header>
-  <div class="left"><h1>openmini</h1><span class="base mono" id="base"></span></div>
-  <div class="health" id="health"></div>
+  <div class="l"><h1 class="big">openmini</h1><span class="base mono" id="base"></span></div>
+  <div class="r"><span class="hint mono">cached · nothing fetched on open</span><button class="all" onclick="refreshAll()" id="all">Refresh all</button></div>
 </header>
-<div class="toolbar">
-  <span class="hint">Nothing is fetched on load. Each button asks only its own backend.</span>
-  <div class="btns">
-    <button onclick="refresh('web')" id="btn-web">Refresh web</button>
-    <button onclick="refresh('agy')" id="btn-agy">Refresh agy</button>
-    <button onclick="refresh('agyapi')" id="btn-agyapi">Refresh agyapi</button>
-    <button class="primary" onclick="refreshAll()" id="btn-all">Refresh all</button>
-  </div>
-</div>
-<main id="cards"></main>
+<main>
+  <div class="tiles" id="tiles"></div>
+  <section class="panel" id="req"></section>
+</main>
 <script>
 const BACKENDS = ['web','agy','agyapi'];
-const LABEL = { web:'Gemini app in the browser', agy:'Antigravity CLI (harness)', agyapi:'Antigravity service (direct)' };
-const state = {};
+const SUB = { web:'Gemini app', agy:'Antigravity CLI', agyapi:'Antigravity service, direct' };
+const state = { health:{} };
+let pollTimer = null;
 
-function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function fmtTime(iso){ if(!iso) return 'never'; const d=new Date(iso); return isNaN(d)?esc(iso):d.toLocaleTimeString(); }
-function pctNum(s){ const m=/(\d{1,3})\s*%/.exec(String(s??'')); return m?parseInt(m[1],10):null; }
-function bar(used){ if(used==null) return ''; const cls = used>=90?'bad':used>=70?'warn':''; return `<div class="bar ${cls}"><i style="width:${Math.max(0,Math.min(100,used))}%"></i></div>`; }
-function line(k,v){ return `<div class="line"><span class="k">${k}</span><span class="mono">${v}</span></div>`; }
+function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function pct(s){ const m=/(\d{1,3})(?:\.\d+)?\s*%/.exec(String(s??'')); return m?parseInt(m[1],10):null; }
+function clockOf(iso){ if(!iso) return 'never'; const d=new Date(iso); return isNaN(d)?esc(iso):d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }
+function mmss(sec){ sec=Math.max(0,Math.round(sec)); const m=Math.floor(sec/60), s=sec%60; return m+':'+String(s).padStart(2,'0'); }
+function fmtN(n){ return (n||0).toLocaleString(); }
+// Go duration "116h37m0s" -> "4d 20h" / "42m"
+function dur(s){ s=String(s||''); const h=+(/(\d+)h/.exec(s)||[0,0])[1], m=+(/(\d+)m/.exec(s)||[0,0])[1]; if(!h&&!m) return s; if(h>=24) return Math.floor(h/24)+'d '+(h%24)+'h'; if(h) return h+'h '+m+'m'; return m+'m'; }
+// Gemini app reset strings in zh-TW: "下午8:40", "上午12:40", "9月10日 下午12:40" -> "20:40", "00:40", "Sep 10 12:40"
+function whenOf(s){
+  s=String(s||''); if(!s) return '?';
+  const mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const d=/(\d{1,2})月(\d{1,2})日/.exec(s); const t=/(上午|下午|AM|PM|am|pm)?\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?/.exec(s);
+  let out='';
+  if(d) out+=mon[+d[1]-1]+' '+d[2]+' ';
+  if(t){ let h=+t[2]; const ap=(t[1]||t[4]||'').toLowerCase(); const pm=ap==='下午'||ap==='pm'; const am=ap==='上午'||ap==='am'; if(pm&&h<12)h+=12; if(am&&h===12)h=0; out+=String(h).padStart(2,'0')+':'+t[3]; }
+  return out.trim()||esc(s);
+}
+function cls(left){ return left==null?'':left<=10?'bad':left<=30?'warn':''; }
+function ring(left,label){ const l=left==null?0:Math.max(0,Math.min(100,left)); const col=left==null?'var(--track)':left<=10?'var(--bad)':left<=30?'var(--warn)':'var(--accent)';
+  return `<div class="ring" style="background:conic-gradient(${col} 0 ${l}%, var(--track) ${l}% 100%)"><i><b class="big mono">${left==null?'—':left+'%'}</b><small>${esc(label||'left')}</small></i></div>`; }
+function bar(left){ const l=left==null?0:100-Math.max(0,Math.min(100,left)); return `<div class="bar ${cls(left)}"><i style="width:${l}%"></i></div>`; }
+function kv(k,v,c){ return `<div class="kv"><span class="k">${esc(k)}</span><span class="mono ${c||''}">${v}</span></div>`; }
 
-// group agy/agyapi bucket rows into a few pools by name
-function poolsFromRows(rows){
-  const groups = {}; const order = [];
-  for (const r of rows){
-    const pool = String(r.pool||''); let key, isModel=false;
-    if (/^chat_|^tab_/.test(pool)) { key='Internal (unused)'; isModel=true; }
-    else if (/claude|gpt/i.test(pool)) { key='Claude and GPT'; isModel=/-/.test(pool); }
-    else if (/gemini/i.test(pool) && /model/i.test(pool)) { key='Gemini'; }        // agy "Gemini Models"
-    else if (/gemini/i.test(pool)) { key='Gemini pool'; isModel=true; }             // agyapi per-model ids
-    else key = pool || 'other';
-    if (!groups[key]){ groups[key]={title:key, byWindow:{}, models:[]}; order.push(key); }
-    const g = groups[key];
-    const win = String(r.window||'').replace(/ ?Limit ?Remaining/i,'').replace(/WTUS/i,'5-hour').trim() || 'window';
-    if (isModel){ g.models.push(pool); if(!g.byWindow['5-hour']) g.byWindow['5-hour']={left:r.remaining, resets:r.resets_in||r.resets_at||''}; }
-    else g.byWindow[win] = { left:r.remaining, resets:r.resets_in||r.resets_at||'' };
+// agy / agyapi rows -> windows [{name, left, resets}], models[]
+function windowsOf(name, rows){
+  const wins=[]; const models=[]; let internal=0; const seen={};
+  for(const r of rows){
+    const pool=String(r.pool||''); const left=pct(r.remaining); const resets=r.resets_in?dur(r.resets_in):(r.resets_at?whenOf(r.resets_at):'');
+    let win=String(r.window||'').replace(/limit remaining/i,'').replace(/^WTUS$/i,'5-hour').replace(/five hour/i,'5-hour').trim()||'5-hour';
+    if(/^chat_|^tab_/.test(pool)){ internal++; continue; }
+    let group;
+    if(name==='agy') group=/claude|gpt/i.test(pool)?'Claude/GPT':'Gemini';
+    else { group=/claude|gpt/i.test(pool)?'Claude/GPT pool':'Gemini pool'; models.push(pool); }
+    const key=group+'|'+win;
+    if(!seen[key]){ seen[key]={name:group+' · '+win, left, resets, n:0}; wins.push(seen[key]); }
+    seen[key].n++;
+    if(left!=null && (seen[key].left==null || left<seen[key].left)) seen[key].left=left;
   }
-  return order.map(k=>groups[k]);
+  return {wins, models, internal};
 }
 
-function renderPool(g){
-  const rows = Object.entries(g.byWindow).map(([w,v])=>{
-    const used = v.left ? 100-(pctNum(v.left)??0) : null;
-    return `${line(`${w} left`, `${esc(v.left||'?')} · ${esc(v.resets||'')}`)}${bar(used)}`;
-  }).join('');
-  const models = g.models.length ? `<div class="sub">${esc(g.models.slice(0,8).join(', '))}${g.models.length>8?`, +${g.models.length-8} more`:''}</div>` : '';
-  return `<div class="pool"><div class="title">${esc(g.title)} ${g.models.length?`<span class="tag">(${g.models.length})</span>`:''}</div>${rows}${models}</div>`;
-}
-
-function renderCard(name){
-  const e = state[name]; let body;
-  if (!e) body = `<div class="msg">Not loaded yet. Press Refresh.</div>`;
-  else if (e.error) body = `<div class="msg bad">${esc(e.error)}</div>`;
-  else if (name==='web') {
-    const d=e.data||{}; const cu=pctNum(d.current_used), wu=pctNum(d.weekly_used);
-    const locked = (d.unavailable&&d.unavailable.length)?`<span class="msg bad">${esc(d.unavailable.join(', '))}</span>`:'none';
-    body = `
-      ${line('Model in use', esc(d.current_model||'?'))}
-      <div class="pool"><div class="title">5-hour window</div>
-        ${d.current_used?`${line('used', esc(d.current_used))}${bar(cu)}<div class="sub">resets ${esc(d.current_resets||'?')}</div>`:'<div class="sub">not read</div>'}</div>
-      <div class="pool"><div class="title">Weekly</div>
-        ${d.weekly_used?`${line('used', esc(d.weekly_used))}${bar(wu)}<div class="sub">resets ${esc(d.weekly_resets||'?')}</div>`:'<div class="sub">not read</div>'}</div>
-      ${line('Locked models', locked)}
-      ${d.panel_error?`<div class="msg bad">${esc(d.panel_error)}</div>`:''}`;
+function tile(name){
+  const e=state[name]; const h=state.health[name]; const dot=h==='ok'?'ok':h?'bad':'';
+  let body='', foot='';
+  if(!e) body=`<div class="msg">Not loaded yet. Press Refresh.</div>`;
+  else if(e.error) body=`<div class="msg bad">${esc(e.error)}</div>`;
+  else if(name==='web'){
+    const d=e.data||{}; const cu=pct(d.current_used), wu=pct(d.weekly_used);
+    const wins=[]; if(cu!=null) wins.push({name:'5-hour window', left:100-cu, resets:whenOf(d.current_resets)}); if(wu!=null) wins.push({name:'Weekly', left:100-wu, resets:whenOf(d.weekly_resets)});
+    body=facts(wins, d.current_model?`model ${esc(d.current_model)}`:'');
+    const locked=(d.unavailable&&d.unavailable.length)?`<span class="badfg">locked: ${esc(d.unavailable.join(', '))}</span>`:'<span>locked models: none</span>';
+    foot=`${locked}<span class="mono">updated ${clockOf(e.at)}</span>`;
+    if(d.panel_error) body+=`<div class="msg bad">${esc(d.panel_error)}</div>`;
   } else {
-    const rows = Array.isArray(e.data)?e.data:[];
-    body = rows.length ? poolsFromRows(rows).map(renderPool).join('') : `<div class="msg">${esc(JSON.stringify(e.data))}</div>`;
+    const rows=Array.isArray(e.data)?e.data:[]; const w=windowsOf(name, rows);
+    body=rows.length?facts(w.wins, name==='agyapi'?`${w.models.length} models`:''):`<div class="msg">${esc(JSON.stringify(e.data))}</div>`;
+    if(name==='agyapi'&&w.models.length) body+=`<div class="models">${esc(w.models.slice(0,10).join(', '))}${w.models.length>10?`, +${w.models.length-10} more`:''}</div>`;
+    foot=`<span>${name==='agyapi'?(w.internal?`${w.internal} internal ids hidden`:'per model'):'per pool'}</span><span class="mono">updated ${clockOf(e.at)}</span>`;
   }
-  const busy = e && e.loading;
-  return `<div class="card">
-    <div class="head"><span class="name">${name}</span><span class="tag">${LABEL[name]}</span></div>
-    ${body}
-    <div class="foot"><span class="when">updated ${e?fmtTime(e.at):'never'}</span>
-      <button class="small" onclick="refresh('${name}')" ${busy?'disabled':''}>${busy?'Refreshing…':'Refresh'}</button></div>
-  </div>`;
+  const busy=e&&e.loading;
+  return `<div class="tile"><div class="th"><div class="n"><span class="dot ${dot}"></span><span class="name big">${name}</span><span class="sub">${SUB[name]}</span></div>
+    <button onclick="refresh('${name}')" ${busy?'disabled':''}>${busy?'Refreshing…':'Refresh'}</button></div>${body}${foot?`<div class="foot">${foot}</div>`:''}</div>`;
+}
+// the ring shows the tightest window; the rest are bars
+function facts(wins, extra){
+  if(!wins.length) return `<div class="msg">no usage read</div>`;
+  const sorted=wins.slice().sort((a,b)=>(a.left??101)-(b.left??101)); const t=sorted[0];
+  const rest=sorted.slice(1).map(w=>kv(w.name, `${w.left==null?'?':w.left+'%'} · ${esc(w.resets)}`, cls(w.left)?cls(w.left)+'fg':'')+bar(w.left)).join('');
+  return `<div class="body">${ring(t.left,'left')}<div class="facts"><div class="t">${esc(t.name)}</div><div class="m mono">${t.left==null?'':(100-t.left)+'% used · '}resets ${esc(t.resets)}${extra?' · '+extra:''}</div>${rest?'<div class="hr"></div>'+rest:''}</div></div>`;
 }
 
-function renderRequests(){
-  const d = state.requests, active=(d&&d.active)||[], recent=(d&&d.recent)||[];
-  const head = `<tr><th>backend</th><th>model</th><th>phase</th><th class="num">time</th><th class="num">prompt</th><th class="num">reply</th><th>note</th><th></th></tr>`;
-  const rowA = r=>`<tr><td>${esc(r.backend)}</td><td class="mono">${esc(r.model||'default')}</td>
-    <td><span class="phase"><span class="pdot p-${esc(r.phase)}"></span>${esc(r.phase)}</span></td>
-    <td class="num mono">${Math.round(r.elapsed_s)}s</td><td class="num mono">${(r.prompt_chars||0).toLocaleString()}</td><td class="num mono">${(r.reply_chars||0).toLocaleString()}</td>
-    <td class="msg">${esc(r.note||'')}</td><td><button class="small danger" onclick="stop('${esc(r.id)}')">Stop</button></td></tr>`;
-  const rowR = r=>`<tr style="color:var(--muted)"><td>${esc(r.backend)}</td><td class="mono">${esc(r.model||'default')}</td>
-    <td><span class="phase"><span class="pdot p-${esc(r.phase)}"></span>${esc(r.phase)}</span></td>
-    <td class="num mono">${Math.round(r.elapsed_s)}s</td><td class="num mono">${(r.prompt_chars||0).toLocaleString()}</td><td class="num mono">${(r.reply_chars||0).toLocaleString()}</td>
-    <td class="msg">${esc(r.note||'')}</td><td></td></tr>`;
-  return `<section class="req card">
-    <div class="head"><span class="name">Requests <span class="tag">${active.length} active</span></span>
-      <button class="small" onclick="loadRequests()">Refresh</button></div>
-    ${active.length?`<table>${head}${active.map(rowA).join('')}</table>`:'<div class="msg">nothing running</div>'}
-    ${recent.length?`<div class="sub" style="margin-top:8px">recent</div><table>${head}${recent.slice(0,10).map(rowR).join('')}</table>`:''}
-  </section>`;
+const STEPS=['queued','submitted','thinking','generating','done'];
+function runCard(r){
+  const el=(Date.now()-new Date(r.started).getTime())/1000;
+  const idx=STEPS.indexOf(r.phase); const cur=idx<0?3:idx;
+  const steps=STEPS.map((s,i)=>`<div class="step ${i<cur?'done':i===cur?'now':''}"><span class="d"></span>${s}${i===cur&&r.note?' · '+esc(r.note):''}</div>`).join('<div class="ln"></div>');
+  return `<div class="run"><div class="top"><div class="id"><span class="pill mono">${esc(r.backend)}</span><span class="mono">${esc(r.model||'default')}</span><span class="sub">prompt ${fmtN(r.prompt_chars)} chars${r.reply_chars?` · reply ${fmtN(r.reply_chars)}`:''}</span></div>
+    <div class="id"><span class="timer big mono" data-started="${esc(r.started)}">${mmss(el)}</span><button class="stop" onclick="stop('${esc(r.id)}')">Stop</button></div></div><div class="steps">${steps}</div></div>`;
 }
-
-function render(){ document.getElementById('cards').innerHTML = BACKENDS.map(renderCard).join('') + renderRequests(); }
+function resDot(p){ return p==='finished'?'var(--ok)':p==='failed'?'var(--bad)':'var(--muted)'; }
+function requests(){
+  const d=state.requests, active=(d&&d.active)||[], recent=(d&&d.recent)||[];
+  const rows=recent.slice(0,12).map(r=>`<tr><td>${esc(r.backend)}</td><td class="mono">${esc(r.model||'default')}</td><td><span class="res"><span class="dot" style="background:${resDot(r.phase)}"></span>${esc(r.phase)}</span></td>
+    <td class="num mono">${mmss(r.elapsed_s)}</td><td class="num mono">${fmtN(r.prompt_chars)}</td><td class="num mono">${fmtN(r.reply_chars)}</td><td class="note ${r.phase==='failed'?'badfg':''}">${esc(r.note||'')}</td></tr>`).join('');
+  return `<div class="th"><div class="n"><span class="name big">Requests</span><span class="sub">${active.length?`${active.length} running · updating every 2s`:'nothing running'}</span></div><button onclick="loadRequests()">Refresh</button></div>
+    ${active.map(runCard).join('')}
+    ${recent.length?`<div class="tw"><table><tr><th>backend</th><th>model</th><th>result</th><th class="num">time</th><th class="num">prompt</th><th class="num">reply</th><th>note</th></tr>${rows}</table></div>`:''}`;
+}
+function render(){ document.getElementById('tiles').innerHTML=BACKENDS.map(tile).join(''); document.getElementById('req').innerHTML=requests(); }
 
 async function refresh(name){
-  state[name] = Object.assign({}, state[name], {loading:true}); render();
-  try { const j = await (await fetch('usage/refresh?backend='+name,{method:'POST'})).json(); state[name] = j[name] || {error:j.error||'no data'}; }
-  catch(e){ state[name] = {error:String(e)}; }
+  state[name]=Object.assign({},state[name],{loading:true}); render();
+  try{ const j=await (await fetch('usage/refresh?backend='+name,{method:'POST'})).json(); state[name]=j[name]||{error:j.error||'no data'}; }
+  catch(e){ state[name]={error:String(e)}; }
   render();
 }
-async function refreshAll(){ await Promise.all(BACKENDS.map(refresh)); await loadRequests(); }
-async function loadRequests(){ try { state.requests = await (await fetch('status')).json(); } catch(e){ state.requests=null; } render(); }
-async function stop(id){ try { await fetch('requests/stop?id='+encodeURIComponent(id),{method:'POST'}); } catch(e){} setTimeout(loadRequests, 400); }
+async function refreshAll(){ const b=document.getElementById('all'); b.disabled=true; await Promise.all(BACKENDS.map(refresh)); await loadRequests(); b.disabled=false; }
+async function loadRequests(){
+  try{ state.requests=await (await fetch('status')).json(); }catch(e){ state.requests=null; }
+  render();
+  const active=state.requests&&state.requests.active&&state.requests.active.length;
+  clearTimeout(pollTimer); if(active) pollTimer=setTimeout(loadRequests,2000);
+}
+async function stop(id){ try{ await fetch('requests/stop?id='+encodeURIComponent(id),{method:'POST'}); }catch(e){} setTimeout(loadRequests,400); }
+setInterval(()=>{ for(const t of document.querySelectorAll('.timer')) t.textContent=mmss((Date.now()-new Date(t.dataset.started).getTime())/1000); },1000);
 
 async function init(){
-  document.getElementById('base').textContent = location.origin + '/v1';
-  try {
-    const h = await (await fetch('health')).json();
-    document.getElementById('health').innerHTML = Object.entries(h.backends||{}).map(([k,v])=>`<span><span class="dot ${v==='ok'?'ok':'bad'}"></span>${esc(k)} <b>${esc(v)}</b></span>`).join('');
-  } catch(e){}
-  try { const c = await (await fetch('usage/cached')).json(); for (const n of BACKENDS) if (c[n]) state[n]=c[n]; } catch(e){}
+  document.getElementById('base').textContent=location.origin+'/v1';
+  try{ const h=await (await fetch('health')).json(); state.health=h.backends||{}; }catch(e){}
+  try{ const c=await (await fetch('usage/cached')).json(); for(const n of BACKENDS) if(c[n]) state[n]=c[n]; }catch(e){}
   await loadRequests();
 }
 init();

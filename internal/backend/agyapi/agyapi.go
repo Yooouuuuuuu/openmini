@@ -476,6 +476,9 @@ func (a *AgyAPI) Usage() (any, error) {
         for _, b := range buckets {
             m, _ := b.(map[string]any)
             r := row{Pool: str(m["modelId"]), Window: str(m["tokenType"])}
+            if strings.HasPrefix(r.Pool, "chat_") || strings.HasPrefix(r.Pool, "tab_") {
+                continue // internal ids of the editor's chat and tab features
+            }
             if f, ok := m["remainingFraction"].(float64); ok {
                 r.Remaining = fmt.Sprintf("%.0f%%", f*100)
             } else {
