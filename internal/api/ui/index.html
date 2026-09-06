@@ -6,15 +6,22 @@
 <title>openmini</title>
 <style>
   :root { color-scheme: dark;
-    --bg:#0e1116; --card:#141922; --card2:#131a28; --fg:#e7eaee; --muted:#8a93a0; --dim:#5f6873; --line:#222a35; --hair:#1f242c;
-    --track:#232b37; --ok:#34c46a; --bad:#ff6b60; --badfg:#ff8a80; --warn:#d99a2b; --warnfg:#e3b04b; --accent:#5b8def; --accentfg:#8ab4ff;
-    --btn:#171c24; --btnline:#2c3441; --stopbg:#2a1717; --stopline:#5a2a2a; --runline:#2a4a8a; --pill:#1c2536; --halo:#1c2f52; }
+    --bg:#0a0d13; --glow:rgba(167,139,250,0.26); --card:rgba(22,27,37,0.62); --cardsolid:#141a24; --card2:rgba(167,139,250,0.10);
+    --shadow:0 14px 44px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.10);
+    --fg:#eef0f4; --muted:#9aa3b2; --dim:#6b7484; --line:rgba(167,139,250,0.22); --hair:rgba(255,255,255,0.10); --track:rgba(255,255,255,0.10);
+    --ok:#34c46a; --bad:#ff6b60; --badfg:#ff8a80; --warn:#d99a2b; --warnfg:#e3b04b; --accent:#a78bfa; --accentfg:#c4b5fd;
+    --btn:rgba(255,255,255,0.06); --btnline:rgba(255,255,255,0.18); --primary:rgba(167,139,250,0.22); --primaryline:rgba(167,139,250,0.55);
+    --stopbg:rgba(255,107,96,0.12); --stopline:rgba(255,107,96,0.45); --runline:rgba(167,139,250,0.6); --pill:rgba(167,139,250,0.14); --halo:rgba(167,139,250,0.25); }
   @media (prefers-color-scheme: light) { :root { color-scheme: light;
-    --bg:#f3f4f6; --card:#ffffff; --card2:#f4f7fd; --fg:#1c2128; --muted:#6b7480; --dim:#9aa3ad; --line:#e3e6ea; --hair:#eef0f3;
-    --track:#e9ecf0; --ok:#1f9d55; --bad:#c62d1f; --badfg:#b42318; --warn:#d99a2b; --warnfg:#a56f12; --accent:#2457c5; --accentfg:#2457c5;
-    --btn:#ffffff; --btnline:#d5d9df; --stopbg:#fff3f2; --stopline:#f0c4c0; --runline:#9db6ea; --pill:#e8effc; --halo:#dbe6fb; } }
+    --bg:#f2f3f8; --glow:rgba(139,92,246,0.16); --card:rgba(255,255,255,0.72); --cardsolid:#ffffff; --card2:rgba(139,92,246,0.08);
+    --shadow:0 10px 30px rgba(40,30,80,0.10), inset 0 1px 0 rgba(255,255,255,0.8);
+    --fg:#1c2128; --muted:#6b7480; --dim:#9aa3ad; --line:rgba(139,92,246,0.28); --hair:rgba(0,0,0,0.08); --track:rgba(0,0,0,0.08);
+    --ok:#1f9d55; --bad:#c62d1f; --badfg:#b42318; --warn:#d99a2b; --warnfg:#a56f12; --accent:#7c3aed; --accentfg:#6d28d9;
+    --btn:rgba(255,255,255,0.7); --btnline:rgba(0,0,0,0.15); --primary:rgba(139,92,246,0.14); --primaryline:rgba(139,92,246,0.5);
+    --stopbg:#fff3f2; --stopline:#f0c4c0; --runline:rgba(139,92,246,0.55); --pill:rgba(139,92,246,0.12); --halo:rgba(139,92,246,0.22); } }
   * { box-sizing:border-box }
-  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 "IBM Plex Sans",-apple-system,"Segoe UI",Roboto,"Noto Sans TC",system-ui,sans-serif; }
+  body { margin:0; min-height:100vh; color:var(--fg); font:14px/1.5 "IBM Plex Sans",-apple-system,"Segoe UI",Roboto,"Noto Sans TC",system-ui,sans-serif;
+    background:radial-gradient(1100px 520px at 50% 112%, var(--glow), transparent 62%), var(--bg); background-attachment:fixed; }
   .mono { font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums }
   .big { font-family:"Inter Tight","IBM Plex Sans",system-ui,sans-serif; letter-spacing:-.02em }
   header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 12px 14px 24px; border-bottom:1px solid var(--hair) }
@@ -25,11 +32,12 @@
   button { cursor:pointer; white-space:nowrap; font:inherit; font-size:12px; height:30px; padding:0 12px; border:1px solid var(--btnline); background:var(--btn); color:var(--fg); border-radius:8px }
   button:hover:not([disabled]) { border-color:var(--accent) } button[disabled] { opacity:.5; cursor:default }
   button.stop { color:var(--badfg); background:var(--stopbg); border-color:var(--stopline); font-weight:500; height:26px; padding:0 10px }
-  button.all { height:34px; padding:0 14px; font-size:13px; font-weight:500 }
+  button.all { height:34px; padding:0 14px; font-size:13px; font-weight:500; background:var(--primary); border-color:var(--primaryline) }
   main { padding:18px 24px 28px; display:flex; flex-direction:column; gap:16px }
   .row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px } @media (max-width:860px){ .row { grid-template-columns:minmax(0,1fr) } }
   .row.reqs { margin-top:10px }
-  .tile { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:14px }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); padding:18px 20px; display:flex; flex-direction:column; gap:14px;
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px) }
   .th { display:flex; align-items:center; justify-content:space-between; gap:8px } .th .n { display:flex; align-items:center; gap:10px; min-width:0 }
   .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); flex:none } .dot.ok { background:var(--ok) } .dot.bad { background:var(--bad) }
   .lights { display:inline-flex; align-items:center; gap:4px 6px; font-size:12px; color:var(--muted); margin-right:2px } .lights .dot { margin-left:4px } .lights .dot:first-child { margin-left:0 }
@@ -37,7 +45,7 @@
   .name { font-size:16px; font-weight:600 } .sub { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0 }
   .tile { min-width:0 } .rings { min-width:0 }
   .body { display:flex; align-items:center; gap:18px } .ring { position:relative; width:84px; height:84px; border-radius:50%; flex:none }
-  .ring i { position:absolute; inset:9px; border-radius:50%; background:var(--card); display:flex; flex-direction:column; align-items:center; justify-content:center }
+  .ring i { position:absolute; inset:9px; border-radius:50%; background:var(--cardsolid); display:flex; flex-direction:column; align-items:center; justify-content:center }
   .ring b { font-size:20px; font-weight:600; line-height:1 } .ring small { font-size:10px; color:var(--muted); margin-top:3px }
   .facts { display:flex; flex-direction:column; gap:4px; flex:1; min-width:0 } .facts .t { font-size:13px; font-weight:500 } .facts .m { font-size:12px; color:var(--muted) }
   .hr { height:1px; background:var(--line); margin:6px 0 } .kv { display:flex; justify-content:space-between; gap:8px; font-size:12px; margin-top:4px } .kv .k { color:var(--muted) }
@@ -46,8 +54,9 @@
   .foot { display:flex; justify-content:space-between; gap:8px; font-size:12px; color:var(--muted); border-top:1px solid var(--hair); padding-top:10px; flex-wrap:wrap; margin-top:auto }
   .msg { color:var(--muted) } .msg.bad { color:var(--badfg) }
   .rings { display:flex; justify-content:space-around; gap:12px; padding:4px 0 } .rc { display:flex; flex-direction:column; align-items:center; gap:4px; flex:1; min-width:0 }
+  .tile.wide .rings { display:grid; grid-template-columns:1fr 1fr; justify-items:center } /* each wheel over the request block beneath it */
   .rc .lbl { font-size:13px; font-weight:500; margin-top:6px } .rc .w { font-size:11px; color:var(--muted); white-space:nowrap }
-  .badge { position:relative; width:96px; height:92px } .badge .mini { position:absolute; right:-4px; bottom:0; border:3px solid var(--card); border-radius:50% }
+  .badge { position:relative; width:96px; height:92px } .badge .mini { position:absolute; right:-4px; bottom:0; border:3px solid var(--cardsolid); border-radius:50% }
   .ring.sm { width:40px; height:40px } .ring.sm i { inset:5px } .ring.sm b { font-size:11px }
   /* requests */
   .rq { gap:0 } .rq .th { margin-bottom:6px }
@@ -108,8 +117,9 @@ function leftUntil(s){ const r=dateOf(s); if(!r) return whenOf(s); const m=Math.
 function cls(left){ return left==null?'':left<=10?'bad':left<=30?'warn':''; }
 // colour slides from green (100% left) through yellow to red (0%)
 function colorOf(left){ if(left==null) return 'var(--track)'; const l=Math.max(0,Math.min(100,left)); return `hsl(${Math.round(120*l/100)}, 62%, 46%)`; }
+function glowOf(left){ if(left==null) return 'none'; const l=Math.max(0,Math.min(100,left)); return `hsl(${Math.round(120*l/100)} 62% 46% / 0.4)`; }
 function ring(left,label,small){ const l=left==null?0:Math.max(0,Math.min(100,left)); const col=colorOf(left);
-  return `<div class="ring ${small?'sm':''}" style="background:conic-gradient(${col} 0 ${l}%, var(--track) ${l}% 100%)"><i><b class="big mono">${left==null?'—':left+'%'}</b>${small?'':`<small>${esc(label||'left')}</small>`}</i></div>`; }
+  return `<div class="ring ${small?'sm':''}" style="background:conic-gradient(${col} 0 ${l}%, var(--track) ${l}% 100%);box-shadow:0 0 ${small?14:26}px ${glowOf(left)}"><i><b class="big mono">${left==null?'—':left+'%'}</b>${small?'':`<small>${esc(label||'left')}</small>`}</i></div>`; }
 function bar(left){ const l=left==null?0:100-Math.max(0,Math.min(100,left)); return `<div class="bar ${cls(left)}"><i style="width:${l}%"></i></div>`; }
 function kv(k,v,c){ return `<div class="kv"><span class="k">${esc(k)}</span><span class="mono ${c||''}">${v}</span></div>`; }
 

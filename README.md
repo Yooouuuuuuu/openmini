@@ -1,5 +1,7 @@
 # openmini
 
+![openmini dashboard](docs/dashboard.png)
+
 Your Google AI subscription as an OpenAI-compatible endpoint. Two backends behind one port:
 
 - **web**: drives gemini.google.com in a signed-in browser (the Gemini app quota).
