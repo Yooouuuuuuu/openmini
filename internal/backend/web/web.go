@@ -107,6 +107,7 @@ type Web struct {
 
     modelOptions []string
     unavailable  []string // picker entries currently disabled (usage limit reached)
+    entryNotes   map[string]string // description text shown under a picker entry (e.g. reset hint)
     currentModel string
     desiredModel string
     menuRead     time.Time
@@ -142,6 +143,7 @@ func (w *Web) Usage() (any, error) {
     return map[string]any{
         "current_model": w.currentPickerLabel(),
         "unavailable":   w.unavailable,
+        "entry_notes":   w.entryNotes,
         "menu_read_at":  w.menuRead.Format(time.RFC3339),
         "note":          "the Gemini app shows no counter; disabled picker entries mean their usage limit is reached",
     }, nil
@@ -299,6 +301,17 @@ func (w *Web) readModelMenu() (labels []string, selected string, disabled []stri
         if dis, _ := it.GetAttribute("aria-disabled", pw.LocatorGetAttributeOptions{Timeout: pw.Float(1000)}); dis == "true" {
             disabled = append(disabled, lab)
         }
+        // any secondary text under the entry (the app puts reset hints there)
+        if txt, e := it.TextContent(pw.LocatorTextContentOptions{Timeout: pw.Float(1000)}); e == nil {
+            txt = strings.TrimSpace(strings.ReplaceAll(txt, lab, ""))
+            txt = strings.Join(strings.Fields(txt), " ")
+            if txt != "" {
+                if w.entryNotes == nil {
+                    w.entryNotes = map[string]string{}
+                }
+                w.entryNotes[lab] = txt
+            }
+        }
     }
     w.menuRead = time.Now()
     return labels, selected, disabled, nil
@@ -320,7 +333,13 @@ func (w *Web) ensureModel(want string) (note string, err error) {
     }
     for _, d := range off {
         if strings.EqualFold(d, want) {
-            note = fmt.Sprintf("requested %q is unavailable in the Gemini app (usage limit reached); using %q", want, sel)
+            note = fmt.Sprintf("requested %q is unavailable in the Gemini app (usage limit reached)", want)
+            if hint := w.entryNotes[d]; hint != "" {
+                note += "; the picker says: " + hint
+            }
+            if w.cfg.UnavailableAction == "fallback" {
+                note += fmt.Sprintf("; using %q", sel)
+            }
             w.logf("web: %s", note)
             return note, nil
         }
@@ -365,8 +384,13 @@ func (w *Web) newChat(c backend.Call) error {
     if err != nil {
         return err
     }
-    if note != "" && c.OnPhase != nil {
-        c.OnPhase("model", note)
+    if note != "" {
+        if w.cfg.UnavailableAction != "fallback" {
+            return fmt.Errorf("%s", note) // refuse instead of quietly answering with a smaller model
+        }
+        if c.OnPhase != nil {
+            c.OnPhase("model", note)
+        }
     }
     return nil
 }

@@ -48,6 +48,10 @@ attach_fill_box = false
 start_timeout = 180
 # Extra attempts when Gemini answers with an error notice or refusal; 0 passes everything through.
 retries = 0
+# When the requested model is locked in the picker (usage limit reached):
+# "fail" refuses with a message naming the model and the reset hint;
+# "fallback" answers with whatever model the picker fell back to (a note is attached).
+unavailable_action = "fail"
 
 [agy]
 # Runs the Antigravity CLI (agy) with a tool-less custom agent.

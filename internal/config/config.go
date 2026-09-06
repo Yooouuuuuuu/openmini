@@ -49,6 +49,7 @@ type Web struct {
     AttachFillBox  bool   `toml:"attach_fill_box"`
     StartTimeout   int    `toml:"start_timeout"` // seconds to wait for Gemini to open a reply; 0 = no limit
     Retries        int    `toml:"retries"`       // extra attempts when Gemini answers with an error notice or refusal
+    UnavailableAction string `toml:"unavailable_action"` // "fail" (default): refuse when the requested model is locked; "fallback": answer with the picker's current model
 }
 
 type Agy struct {
@@ -222,6 +223,10 @@ attach_fill_box = false
 start_timeout = 180
 # Extra attempts when Gemini answers with an error notice or refusal; 0 passes everything through.
 retries = 0
+# When the requested model is locked in the picker (usage limit reached):
+# "fail" refuses with a message naming the model and the reset hint;
+# "fallback" answers with whatever model the picker fell back to (a note is attached).
+unavailable_action = "fail"
 
 [agy]
 # Runs the Antigravity CLI (agy) with a tool-less custom agent.
