@@ -103,7 +103,7 @@ function windowsOf(name, rows){
     if(name==='agy') group=/claude|gpt/i.test(pool)?'Claude/GPT':'Gemini';
     else { group=/claude|gpt/i.test(pool)?'Claude/GPT pool':'Gemini pool'; models.push(pool); }
     const key=group+'|'+win;
-    if(!seen[key]){ seen[key]={name:group+' · '+win, left, resets, n:0}; wins.push(seen[key]); }
+    if(!seen[key]){ seen[key]={name:group+' · '+win, left, resets, n:0, rank:/^gemini/i.test(group)?0:1}; wins.push(seen[key]); }
     seen[key].n++;
     if(left!=null && (seen[key].left==null || left<seen[key].left)) seen[key].left=left;
   }
@@ -124,9 +124,8 @@ function tile(name){
     if(d.panel_error) body+=`<div class="msg bad">${esc(d.panel_error)}</div>`;
   } else {
     const rows=Array.isArray(e.data)?e.data:[]; const w=windowsOf(name, rows);
-    body=rows.length?facts(w.wins, name==='agyapi'?`${w.models.length} models`:''):`<div class="msg">${esc(JSON.stringify(e.data))}</div>`;
-    if(name==='agyapi'&&w.models.length) body+=`<div class="models">${esc(w.models.slice(0,10).join(', '))}${w.models.length>10?`, +${w.models.length-10} more`:''}</div>`;
-    foot=`<span>${name==='agyapi'?(w.internal?`${w.internal} internal ids hidden`:'per model'):'per pool'}</span><span class="mono">updated ${clockOf(e.at)}</span>`;
+    body=rows.length?facts(w.wins, ''):`<div class="msg">${esc(JSON.stringify(e.data))}</div>`;
+    foot=`<span></span><span class="mono">updated ${clockOf(e.at)}</span>`;
   }
   const busy=e&&e.loading;
   return `<div class="tile"><div class="th"><div class="n"><span class="dot ${dot}"></span><span class="name big">${name}</span><span class="sub">${SUB[name]}</span></div>
@@ -135,7 +134,7 @@ function tile(name){
 // the ring shows the tightest window; the rest are bars
 function facts(wins, extra){
   if(!wins.length) return `<div class="msg">no usage read</div>`;
-  const sorted=wins.slice().sort((a,b)=>(a.left??101)-(b.left??101)); const t=sorted[0];
+  const sorted=wins.slice().sort((a,b)=>((a.rank||0)-(b.rank||0))||((a.left??101)-(b.left??101))); const t=sorted[0];
   const rest=sorted.slice(1).map(w=>kv(w.name, `${w.left==null?'?':w.left+'%'} · ${esc(w.resets)}`, cls(w.left)?cls(w.left)+'fg':'')+bar(w.left)).join('');
   return `<div class="body">${ring(t.left,'left')}<div class="facts"><div class="t">${esc(t.name)}</div><div class="m mono">${t.left==null?'':(100-t.left)+'% used · '}resets ${esc(t.resets)}${extra?' · '+extra:''}</div>${rest?'<div class="hr"></div>'+rest:''}</div></div>`;
 }
