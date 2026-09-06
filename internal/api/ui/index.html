@@ -67,7 +67,7 @@
 </main>
 <script>
 const BACKENDS = ['web','agy','agyapi'];
-const SUB = { web:'Gemini app', agy:'Antigravity CLI', agyapi:'Antigravity service, direct' };
+const SUB = { web:'Gemini web app', agy:'Antigravity CLI', agyapi:'Antigravity service, direct' };
 const state = { health:{}, live:false };
 
 function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -116,7 +116,7 @@ function tile(name){
   else if(e.error) body=`<div class="msg bad">${esc(e.error)}</div>`;
   else if(name==='web'){
     const d=e.data||{}; const cu=pct(d.current_used), wu=pct(d.weekly_used);
-    const wins=[]; if(cu!=null) wins.push({group:'5-hour', win:'', left:100-cu, resets:whenOf(d.current_resets)}); if(wu!=null) wins.push({group:'Weekly', win:'', left:100-wu, resets:whenOf(d.weekly_resets)});
+    const wins=[]; if(wu!=null) wins.push({group:'Gemini', win:'Weekly', left:100-wu, resets:whenOf(d.weekly_resets)}); if(cu!=null) wins.push({group:'Gemini', win:'5-hour', left:100-cu, resets:whenOf(d.current_resets)});
     body=wins.length?rings(wins):`<div class="msg">no usage read</div>`;
     const notes=d.entry_notes; const noteTxt=!notes?'':Array.isArray(notes)?notes.join(' '):typeof notes==='object'?Object.values(notes).join(' '):String(notes);
     const until=/(\d{1,2}月\d{1,2}日)?\s*(上午|下午)?\s*\d{1,2}:\d{2}/.exec(noteTxt); // e.g. 用量額度將於 9月7日 上午1:40 重設
