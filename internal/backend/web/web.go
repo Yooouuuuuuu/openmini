@@ -5,6 +5,7 @@ package web
 
 import (
     "bytes"
+    "context"
     "encoding/json"
     "fmt"
     "path/filepath"
@@ -442,6 +443,19 @@ const pageWait = 60 * time.Second
 
 func (w *Web) waitMillis() *float64 { return pw.Float(float64(pageWait / time.Millisecond)) }
 
+// stopped reports whether the request's context has been cancelled.
+func stopped(ctx context.Context) bool {
+    if ctx == nil {
+        return false
+    }
+    select {
+    case <-ctx.Done():
+        return true
+    default:
+        return false
+    }
+}
+
 func (w *Web) deadlinePassed(start time.Time) bool {
     return w.timeout > 0 && time.Since(start) > time.Duration(w.timeout)*time.Second
 }
@@ -786,6 +800,9 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
     start := time.Now()
 
     for {
+        if stopped(c.Ctx) {
+            return "", fmt.Errorf("stopped by request")
+        }
         if n, _ := responses.Count(); n > before {
             break
         }

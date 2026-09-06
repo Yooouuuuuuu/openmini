@@ -115,7 +115,11 @@ func (a *Agy) Complete(c backend.Call) (backend.Result, error) {
     // --print must come last with an empty value: given earlier it swallows the next flag.
     args = append(args, "--print=")
 
-    ctx, cancel := context.WithCancel(context.Background())
+    base := c.Ctx
+    if base == nil {
+        base = context.Background()
+    }
+    ctx, cancel := context.WithCancel(base)
     defer cancel()
     cmd := exec.CommandContext(ctx, a.cfg.Binary, args...)
     cmd.Dir = a.cfg.Workspace
@@ -191,6 +195,12 @@ func (a *Agy) Complete(c backend.Call) (backend.Result, error) {
         a.logf("agy stderr (%s): %s", c.ID, firstLine(s))
     }
     if !got {
+        if base != nil && base.Err() == context.Canceled {
+            if soFar.Len() > 0 {
+                return backend.Result{Text: soFar.String(), Status: "STOPPED"}, nil
+            }
+            return backend.Result{}, fmt.Errorf("stopped by request")
+        }
         msg := strings.TrimSpace(stderr.String())
         if msg == "" {
             msg = "agy ended without a result event"

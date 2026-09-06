@@ -32,12 +32,31 @@ type Request struct {
 }
 
 type Registry struct {
-    mu     sync.Mutex
-    active map[string]*Request
-    recent []*Request
+    mu      sync.Mutex
+    active  map[string]*Request
+    recent  []*Request
+    cancels map[string]func()
 }
 
-func New() *Registry { return &Registry{active: map[string]*Request{}} }
+func New() *Registry { return &Registry{active: map[string]*Request{}, cancels: map[string]func(){}} }
+
+// SetCancel stores the function that stops request id.
+func (r *Registry) SetCancel(id string, fn func()) {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    r.cancels[id] = fn
+}
+
+// Cancel stops the active request id and reports whether it was found.
+func (r *Registry) Cancel(id string) bool {
+    r.mu.Lock()
+    fn, ok := r.cancels[id]
+    r.mu.Unlock()
+    if ok && fn != nil {
+        fn()
+    }
+    return ok
+}
 
 func (r *Registry) Start(id, backend, model string, promptChars int, stream bool) {
     r.mu.Lock()
@@ -68,6 +87,7 @@ func (r *Registry) Finish(id string, phase Phase, replyChars int, note string) {
         return
     }
     delete(r.active, id)
+    delete(r.cancels, id)
     q.Phase, q.Updated, q.ReplyChars, q.Note = phase, time.Now(), replyChars, note
     q.ElapsedSec = q.Updated.Sub(q.Started).Seconds()
     r.recent = append([]*Request{q}, r.recent...)

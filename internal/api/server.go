@@ -4,6 +4,7 @@ package api
 
 import (
     "bufio"
+    "context"
     "crypto/rand"
     _ "embed"
     "encoding/hex"
@@ -77,6 +78,7 @@ func (s *Server) Listen() error {
     app.Get("/usage/refresh", s.handleUsageRefresh)
     app.Get("/health", s.handleHealth)
     app.Get("/status", s.handleStatus)
+    app.Post("/requests/stop", s.handleStop)
     app.Get("/v1/models", s.handleModels)
     app.Post("/v1/chat/completions", s.handleChat)
     app.Post("/tools/policy-bisect", s.handlePolicyBisect)
@@ -240,6 +242,24 @@ func (s *Server) handleModels(c *fiber.Ctx) error {
         data = []fiber.Map{}
     }
     return c.JSON(fiber.Map{"object": "list", "data": data})
+}
+
+// handleStop cancels an active request by id (?id= or JSON {"id":...}).
+func (s *Server) handleStop(c *fiber.Ctx) error {
+    id := c.Query("id")
+    if id == "" {
+        var b struct{ ID string `json:"id"` }
+        c.BodyParser(&b)
+        id = b.ID
+    }
+    if id == "" {
+        return c.Status(400).JSON(fiber.Map{"error": "id required"})
+    }
+    if s.st.Cancel(id) {
+        s.log.Printf("%s stop requested", id)
+        return c.JSON(fiber.Map{"ok": true, "id": id})
+    }
+    return c.Status(404).JSON(fiber.Map{"ok": false, "error": "no active request with that id"})
 }
 
 // handleUsageCached returns the last known usage per backend without
@@ -448,7 +468,7 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
     if err := c.BodyParser(&req); err != nil {
         return c.Status(400).JSON(fiber.Map{"error": fiber.Map{"message": "invalid JSON body: " + err.Error(), "type": "invalid_request_error"}})
     }
-    full, context, lastUser, err := s.buildPrompt(req.Messages)
+    full, promptContext, lastUser, err := s.buildPrompt(req.Messages)
     if err != nil {
         return c.Status(400).JSON(fiber.Map{"error": fiber.Map{"message": err.Error(), "type": "invalid_request_error"}})
     }
@@ -463,6 +483,9 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
         return c.Status(400).JSON(fiber.Map{"error": fiber.Map{"message": err.Error(), "type": "invalid_request_error"}})
     }
     id := newID()
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    s.st.SetCancel(id, cancel)
     created := time.Now().Unix()
     shown := req.Model
     if shown == "" {
@@ -486,7 +509,7 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
     s.log.Printf("%s %s model=%q stream=%v prompt=%d chars", id, b.Name(), model, req.Stream, backend.Chars(full))
     c.Set("X-Openmini-Request-Id", id)
 
-    call := backend.Call{ID: id, Model: model, Prompt: full, Context: context, LastUser: lastUser}
+    call := backend.Call{ID: id, Ctx: ctx, Model: model, Prompt: full, Context: promptContext, LastUser: lastUser}
     finish := func(res backend.Result, err error, t0 time.Time) string {
         reply := res.Text
         phase := state.Finished

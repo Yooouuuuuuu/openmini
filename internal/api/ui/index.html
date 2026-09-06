@@ -5,124 +5,177 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>openmini</title>
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --fg:#1b1f24; --muted:#6b7280; --line:#e5e7eb; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; --accent:#2563eb; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --card:#171a21; --fg:#e6e8eb; --muted:#9aa3ad; --line:#2a2f3a; --ok:#4ade80; --bad:#f87171; --warn:#fbbf24; --accent:#60a5fa; } }
+  :root {
+    --bg:#f4f5f7; --card:#fff; --fg:#1c2128; --muted:#6b7480; --line:#e3e6ea; --hair:#eef0f3;
+    --ok:#1f9d55; --bad:#b42318; --warn:#b7791f; --accent:#2457c5; --accentbg:#2457c5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1115; --card:#171a21; --fg:#e6e8eb; --muted:#9aa3ad; --line:#262b34; --hair:#20242c;
+      --ok:#4ade80; --bad:#f87171; --warn:#fbbf24; --accent:#6ea0ff; --accentbg:#2f5fd0; }
+  }
   * { box-sizing:border-box }
-  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans TC",sans-serif; }
-  header { padding:16px 20px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:14px; flex-wrap:wrap }
-  header h1 { margin:0; font-size:18px } header .sub { color:var(--muted) }
-  main { padding:16px 20px; display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
-  .card h2 { margin:0 0 6px; font-size:15px; display:flex; align-items:center; gap:10px }
-  .card h2 .tag { font-weight:normal; color:var(--muted); font-size:12px }
-  .row { display:flex; justify-content:space-between; gap:12px; padding:5px 0; border-top:1px solid var(--line) }
-  .row:first-of-type { border-top:0 }
-  .k { color:var(--muted) } .v { text-align:right; word-break:break-word }
-  .bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin-top:4px }
-  .bar > i { display:block; height:100%; background:var(--accent) }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font:14px/1.5 "IBM Plex Sans",-apple-system,"Segoe UI",Roboto,"Noto Sans TC",system-ui,sans-serif; }
+  .mono { font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums; }
+  header { display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap;
+    padding:14px 22px; background:var(--card); border-bottom:1px solid var(--line); }
+  header .left { display:flex; align-items:baseline; gap:14px }
+  header h1 { margin:0; font-size:17px; font-weight:600; letter-spacing:.2px }
+  header .base { color:var(--muted); font-size:12px }
+  header .health { display:flex; gap:16px; font-size:12px; color:var(--muted) }
+  header .health b { font-weight:400 } .dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:5px; background:var(--muted) }
+  .dot.ok { background:var(--ok) } .dot.bad { background:var(--bad) }
+  .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px 22px 0 }
+  .toolbar .hint { color:var(--muted); font-size:12px }
+  .btns { display:flex; gap:8px; flex-wrap:wrap }
+  button { cursor:pointer; font:inherit; font-size:13px; border:1px solid var(--line); background:var(--card); color:var(--fg);
+    border-radius:6px; height:32px; padding:0 12px; }
+  button:hover:not([disabled]) { border-color:var(--accent) }
+  button[disabled] { opacity:.5; cursor:default }
+  button.primary { background:var(--accentbg); border-color:var(--accentbg); color:#fff; font-weight:500 }
+  button.small { height:28px; padding:0 10px; font-size:12px }
+  button.danger { color:var(--bad); font-weight:500 }
+  main { padding:14px 22px 28px; display:grid; gap:16px; grid-template-columns:repeat(3,minmax(0,1fr)); }
+  @media (max-width:1080px){ main { grid-template-columns:1fr } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; display:flex; flex-direction:column; gap:14px; }
+  .card > .head { display:flex; align-items:baseline; justify-content:space-between }
+  .card .name { font-size:14px; font-weight:600 } .card .tag { font-size:12px; color:var(--muted) }
+  .pool { display:flex; flex-direction:column; gap:6px }
+  .pool .title { font-size:13px; font-weight:500 }
+  .line { display:flex; justify-content:space-between; font-size:13px } .line .k { color:var(--muted) }
+  .bar { height:6px; border-radius:3px; background:var(--hair); overflow:hidden } .bar > i { display:block; height:100% ; background:var(--accent) }
   .bar.warn > i { background:var(--warn) } .bar.bad > i { background:var(--bad) }
-  button { cursor:pointer; border:1px solid var(--line); background:transparent; color:var(--fg); border-radius:8px; padding:6px 10px; font:inherit }
-  button:hover { border-color:var(--accent) } button[disabled] { opacity:.5; cursor:default }
-  .foot { margin-top:8px; display:flex; justify-content:space-between; align-items:center; color:var(--muted); font-size:12px }
-  .ok { color:var(--ok) } .bad { color:var(--bad) } .muted { color:var(--muted) }
-  pre { white-space:pre-wrap; margin:0; font-size:12px; color:var(--muted) }
-  table { width:100%; border-collapse:collapse; font-size:13px } td,th { text-align:left; padding:4px 6px; border-top:1px solid var(--line) } th { color:var(--muted); font-weight:normal; border-top:0 }
-  td.num { text-align:right }
+  .sub { font-size:12px; color:var(--muted); line-height:1.5 }
+  .foot { display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--hair); padding-top:10px; margin-top:2px; }
+  .foot .when { font-size:11px; color:var(--muted) }
+  .msg { color:var(--muted) } .msg.bad { color:var(--bad) }
+  section.req { grid-column:1/-1; }
+  table { width:100%; border-collapse:collapse; font-size:13px } th,td { text-align:left; padding:7px 8px; border-top:1px solid var(--hair) } th { color:var(--muted); font-weight:400; border-top:0 }
+  td.num, th.num { text-align:right } .phase { display:inline-flex; align-items:center; gap:6px }
+  .pdot { width:8px; height:8px; border-radius:50%; display:inline-block } .p-generating{background:var(--accent)} .p-submitted{background:var(--warn)} .p-queued{background:var(--muted)} .p-finished{background:var(--ok)} .p-failed{background:var(--bad)}
 </style>
 </head>
 <body>
 <header>
-  <h1>openmini</h1>
-  <span class="sub" id="base"></span>
-  <span class="sub" id="health"></span>
+  <div class="left"><h1>openmini</h1><span class="base mono" id="base"></span></div>
+  <div class="health" id="health"></div>
 </header>
+<div class="toolbar">
+  <span class="hint">Nothing is fetched on load. Each button asks only its own backend.</span>
+  <div class="btns">
+    <button onclick="refresh('web')" id="btn-web">Refresh web</button>
+    <button onclick="refresh('agy')" id="btn-agy">Refresh agy</button>
+    <button onclick="refresh('agyapi')" id="btn-agyapi">Refresh agyapi</button>
+    <button class="primary" onclick="refreshAll()" id="btn-all">Refresh all</button>
+  </div>
+</div>
 <main id="cards"></main>
 <script>
-const cards = document.getElementById('cards');
-const backends = ['web','agy','agyapi'];
+const BACKENDS = ['web','agy','agyapi'];
+const LABEL = { web:'Gemini app in the browser', agy:'Antigravity CLI (harness)', agyapi:'Antigravity service (direct)' };
 const state = {};
 
-function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
-function fmtTime(iso){ if(!iso) return 'never'; const d=new Date(iso); return isNaN(d)?iso:d.toLocaleString(); }
-function pct(s){ const m=/(\d{1,3})\s*%/.exec(String(s||'')); return m?parseInt(m[1],10):null; }
-function bar(used){ if(used==null) return ''; const cls = used>=90?'bad':used>=70?'warn':''; return `<div class="bar ${cls}"><i style="width:${Math.min(100,used)}%"></i></div>`; }
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmtTime(iso){ if(!iso) return 'never'; const d=new Date(iso); return isNaN(d)?esc(iso):d.toLocaleTimeString(); }
+function pctNum(s){ const m=/(\d{1,3})\s*%/.exec(String(s??'')); return m?parseInt(m[1],10):null; }
+function bar(used){ if(used==null) return ''; const cls = used>=90?'bad':used>=70?'warn':''; return `<div class="bar ${cls}"><i style="width:${Math.max(0,Math.min(100,used))}%"></i></div>`; }
+function line(k,v){ return `<div class="line"><span class="k">${k}</span><span class="mono">${v}</span></div>`; }
 
-function renderBackend(name, entry){
-  const body = [];
-  if (!entry) body.push('<div class="muted">Not loaded yet. Press Refresh.</div>');
-  else if (entry.error) body.push(`<div class="bad">${escapeHtml(entry.error)}</div>`);
-  else {
-    const d = entry.data;
-    if (name === 'web' && d && !Array.isArray(d)) {
-      const cu = pct(d.current_used), wu = pct(d.weekly_used);
-      body.push(row('Model in use', d.current_model || '?'));
-      if (d.unavailable && d.unavailable.length) body.push(row('Locked (limit reached)', `<span class="bad">${escapeHtml(d.unavailable.join(', '))}</span>`));
-      body.push(row('5-hour window used', d.current_used ? `${escapeHtml(d.current_used)}<br><span class="muted">resets ${escapeHtml(d.current_resets||'?')}</span>${bar(cu)}` : '<span class="muted">not read</span>'));
-      body.push(row('Weekly used', d.weekly_used ? `${escapeHtml(d.weekly_used)}<br><span class="muted">resets ${escapeHtml(d.weekly_resets||'?')}</span>${bar(wu)}` : '<span class="muted">not read</span>'));
-      if (d.panel_error) body.push(row('Panel', `<span class="bad">${escapeHtml(d.panel_error)}</span>`));
-    } else if (Array.isArray(d)) {
-      const rows = d.map(r => {
-        const used = r.remaining ? 100 - (pct(r.remaining) ?? 0) : null;
-        return `<tr><td>${escapeHtml(r.pool||'')}</td><td>${escapeHtml(r.window||'')}</td><td class="num">${escapeHtml(r.remaining||'')}</td><td>${escapeHtml(r.resets_in||r.resets_at||'')}</td></tr>`;
-      }).join('');
-      body.push(`<table><tr><th>pool / model</th><th>window</th><th>left</th><th>resets in</th></tr>${rows}</table>`);
-    } else {
-      body.push(`<pre>${escapeHtml(JSON.stringify(d, null, 1))}</pre>`);
-    }
+// group agy/agyapi bucket rows into a few pools by name
+function poolsFromRows(rows){
+  const groups = {}; const order = [];
+  for (const r of rows){
+    const pool = String(r.pool||''); let key, isModel=false;
+    if (/^chat_|^tab_/.test(pool)) { key='Internal (unused)'; isModel=true; }
+    else if (/claude|gpt/i.test(pool)) { key='Claude and GPT'; isModel=/-/.test(pool); }
+    else if (/gemini/i.test(pool) && /model/i.test(pool)) { key='Gemini'; }        // agy "Gemini Models"
+    else if (/gemini/i.test(pool)) { key='Gemini pool'; isModel=true; }             // agyapi per-model ids
+    else key = pool || 'other';
+    if (!groups[key]){ groups[key]={title:key, byWindow:{}, models:[]}; order.push(key); }
+    const g = groups[key];
+    const win = String(r.window||'').replace(/ ?Limit ?Remaining/i,'').replace(/WTUS/i,'5-hour').trim() || 'window';
+    if (isModel){ g.models.push(pool); if(!g.byWindow['5-hour']) g.byWindow['5-hour']={left:r.remaining, resets:r.resets_in||r.resets_at||''}; }
+    else g.byWindow[win] = { left:r.remaining, resets:r.resets_in||r.resets_at||'' };
   }
-  const at = entry ? fmtTime(entry.at) : 'never';
-  return `
-    <div class="card" id="card-${name}">
-      <h2>${name} <span class="tag">${labelFor(name)}</span></h2>
-      ${body.join('')}
-      <div class="foot"><span>updated ${at}</span><button onclick="refresh('${name}')" id="btn-${name}">Refresh</button></div>
-    </div>`;
-}
-function labelFor(n){ return {web:'Gemini app in the browser', agy:'Antigravity CLI (harness)', agyapi:'Antigravity service (direct)'}[n] || ''; }
-function row(k,v){ return `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`; }
-function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-
-function renderRequests(d){
-  const active = (d && d.active) || [], recent = (d && d.recent) || [];
-  const line = r => `<tr><td>${escapeHtml(r.backend)}</td><td>${escapeHtml(r.model||'default')}</td><td>${escapeHtml(r.phase)}</td><td class="num">${Math.round(r.elapsed_s)}s</td><td class="num">${r.prompt_chars}</td><td class="num">${r.reply_chars}</td><td class="muted">${escapeHtml(r.note||'')}</td></tr>`;
-  const table = rows => `<table><tr><th>backend</th><th>model</th><th>phase</th><th>time</th><th>prompt</th><th>reply</th><th>note</th></tr>${rows}</table>`;
-  return `
-    <div class="card" id="card-requests" style="grid-column:1/-1">
-      <h2>Requests <span class="tag">${active.length} active</span></h2>
-      ${active.length ? table(active.map(line)) : '<div class="muted">nothing running</div>'}
-      ${recent.length ? `<div class="muted" style="margin-top:8px">recent</div>${table(recent.slice(0,10).map(line))}` : ''}
-      <div class="foot"><span>${d && d.checked_at ? 'updated '+fmtTime(d.checked_at) : ''}</span><button onclick="loadRequests()">Refresh</button></div>
-    </div>`;
+  return order.map(k=>groups[k]);
 }
 
-function render(){
-  cards.innerHTML = backends.map(n => renderBackend(n, state[n])).join('') + renderRequests(state.requests);
+function renderPool(g){
+  const rows = Object.entries(g.byWindow).map(([w,v])=>{
+    const used = v.left ? 100-(pctNum(v.left)??0) : null;
+    return `${line(`${w} left`, `${esc(v.left||'?')} · ${esc(v.resets||'')}`)}${bar(used)}`;
+  }).join('');
+  const models = g.models.length ? `<div class="sub">${esc(g.models.slice(0,8).join(', '))}${g.models.length>8?`, +${g.models.length-8} more`:''}</div>` : '';
+  return `<div class="pool"><div class="title">${esc(g.title)} ${g.models.length?`<span class="tag">(${g.models.length})</span>`:''}</div>${rows}${models}</div>`;
 }
+
+function renderCard(name){
+  const e = state[name]; let body;
+  if (!e) body = `<div class="msg">Not loaded yet. Press Refresh.</div>`;
+  else if (e.error) body = `<div class="msg bad">${esc(e.error)}</div>`;
+  else if (name==='web') {
+    const d=e.data||{}; const cu=pctNum(d.current_used), wu=pctNum(d.weekly_used);
+    const locked = (d.unavailable&&d.unavailable.length)?`<span class="msg bad">${esc(d.unavailable.join(', '))}</span>`:'none';
+    body = `
+      ${line('Model in use', esc(d.current_model||'?'))}
+      <div class="pool"><div class="title">5-hour window</div>
+        ${d.current_used?`${line('used', esc(d.current_used))}${bar(cu)}<div class="sub">resets ${esc(d.current_resets||'?')}</div>`:'<div class="sub">not read</div>'}</div>
+      <div class="pool"><div class="title">Weekly</div>
+        ${d.weekly_used?`${line('used', esc(d.weekly_used))}${bar(wu)}<div class="sub">resets ${esc(d.weekly_resets||'?')}</div>`:'<div class="sub">not read</div>'}</div>
+      ${line('Locked models', locked)}
+      ${d.panel_error?`<div class="msg bad">${esc(d.panel_error)}</div>`:''}`;
+  } else {
+    const rows = Array.isArray(e.data)?e.data:[];
+    body = rows.length ? poolsFromRows(rows).map(renderPool).join('') : `<div class="msg">${esc(JSON.stringify(e.data))}</div>`;
+  }
+  const busy = e && e.loading;
+  return `<div class="card">
+    <div class="head"><span class="name">${name}</span><span class="tag">${LABEL[name]}</span></div>
+    ${body}
+    <div class="foot"><span class="when">updated ${e?fmtTime(e.at):'never'}</span>
+      <button class="small" onclick="refresh('${name}')" ${busy?'disabled':''}>${busy?'Refreshing…':'Refresh'}</button></div>
+  </div>`;
+}
+
+function renderRequests(){
+  const d = state.requests, active=(d&&d.active)||[], recent=(d&&d.recent)||[];
+  const head = `<tr><th>backend</th><th>model</th><th>phase</th><th class="num">time</th><th class="num">prompt</th><th class="num">reply</th><th>note</th><th></th></tr>`;
+  const rowA = r=>`<tr><td>${esc(r.backend)}</td><td class="mono">${esc(r.model||'default')}</td>
+    <td><span class="phase"><span class="pdot p-${esc(r.phase)}"></span>${esc(r.phase)}</span></td>
+    <td class="num mono">${Math.round(r.elapsed_s)}s</td><td class="num mono">${(r.prompt_chars||0).toLocaleString()}</td><td class="num mono">${(r.reply_chars||0).toLocaleString()}</td>
+    <td class="msg">${esc(r.note||'')}</td><td><button class="small danger" onclick="stop('${esc(r.id)}')">Stop</button></td></tr>`;
+  const rowR = r=>`<tr style="color:var(--muted)"><td>${esc(r.backend)}</td><td class="mono">${esc(r.model||'default')}</td>
+    <td><span class="phase"><span class="pdot p-${esc(r.phase)}"></span>${esc(r.phase)}</span></td>
+    <td class="num mono">${Math.round(r.elapsed_s)}s</td><td class="num mono">${(r.prompt_chars||0).toLocaleString()}</td><td class="num mono">${(r.reply_chars||0).toLocaleString()}</td>
+    <td class="msg">${esc(r.note||'')}</td><td></td></tr>`;
+  return `<section class="req card">
+    <div class="head"><span class="name">Requests <span class="tag">${active.length} active</span></span>
+      <button class="small" onclick="loadRequests()">Refresh</button></div>
+    ${active.length?`<table>${head}${active.map(rowA).join('')}</table>`:'<div class="msg">nothing running</div>'}
+    ${recent.length?`<div class="sub" style="margin-top:8px">recent</div><table>${head}${recent.slice(0,10).map(rowR).join('')}</table>`:''}
+  </section>`;
+}
+
+function render(){ document.getElementById('cards').innerHTML = BACKENDS.map(renderCard).join('') + renderRequests(); }
+
 async function refresh(name){
-  const b = document.getElementById('btn-'+name); if (b) { b.disabled = true; b.textContent = 'Refreshing…'; }
-  try {
-    const r = await fetch('usage/refresh?backend='+name, {method:'POST'});
-    const j = await r.json();
-    state[name] = j[name] || {error: j.error || 'no data'};
-  } catch (e) { state[name] = {error: String(e)}; }
+  state[name] = Object.assign({}, state[name], {loading:true}); render();
+  try { const j = await (await fetch('usage/refresh?backend='+name,{method:'POST'})).json(); state[name] = j[name] || {error:j.error||'no data'}; }
+  catch(e){ state[name] = {error:String(e)}; }
   render();
 }
-async function loadRequests(){
-  try { state.requests = await (await fetch('status')).json(); } catch(e) { state.requests = null; }
-  render();
-}
+async function refreshAll(){ await Promise.all(BACKENDS.map(refresh)); await loadRequests(); }
+async function loadRequests(){ try { state.requests = await (await fetch('status')).json(); } catch(e){ state.requests=null; } render(); }
+async function stop(id){ try { await fetch('requests/stop?id='+encodeURIComponent(id),{method:'POST'}); } catch(e){} setTimeout(loadRequests, 400); }
+
 async function init(){
   document.getElementById('base').textContent = location.origin + '/v1';
   try {
     const h = await (await fetch('health')).json();
-    document.getElementById('health').innerHTML = Object.entries(h.backends||{}).map(([k,v]) => `${k}: <span class="${v==='ok'?'ok':'bad'}">${escapeHtml(v)}</span>`).join(' · ');
-  } catch(e) {}
-  // cached values only: nothing is fetched from the backends on entry
-  try {
-    const c = await (await fetch('usage/cached')).json();
-    for (const n of backends) if (c[n]) state[n] = c[n];
-  } catch(e) {}
-  render();
+    document.getElementById('health').innerHTML = Object.entries(h.backends||{}).map(([k,v])=>`<span><span class="dot ${v==='ok'?'ok':'bad'}"></span>${esc(k)} <b>${esc(v)}</b></span>`).join('');
+  } catch(e){}
+  try { const c = await (await fetch('usage/cached')).json(); for (const n of BACKENDS) if (c[n]) state[n]=c[n]; } catch(e){}
+  await loadRequests();
 }
 init();
 </script>

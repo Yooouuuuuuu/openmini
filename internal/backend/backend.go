@@ -2,11 +2,15 @@
 // builds prompts, tracks state and speaks OpenAI; backends only deliver text.
 package backend
 
-import "unicode/utf8"
+import (
+    "context"
+    "unicode/utf8"
+)
 
 // Call is one prompt for a backend.
 type Call struct {
     ID       string
+    Ctx      context.Context // cancelled to stop the request; may be nil
     Model    string // backend-specific model id; empty = backend default
     Prompt   string // everything, in one string
     Context  string // everything except the final user message (for attach/split modes)

@@ -344,15 +344,21 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
         req["enabledCreditTypes"] = a.cfg.CreditTypes
     }
 
-    ctx := context.Background()
-    var cancel context.CancelFunc
+    ctx := c.Ctx
+    if ctx == nil {
+        ctx = context.Background()
+    }
     if a.timeout > 0 {
+        var cancel context.CancelFunc
         ctx, cancel = context.WithTimeout(ctx, time.Duration(a.timeout)*time.Second)
         defer cancel()
     }
     t0 := time.Now()
     resp, err := a.post(ctx, "streamGenerateContent", req, true)
     if err != nil {
+        if ctx.Err() == context.Canceled {
+            return backend.Result{}, fmt.Errorf("stopped by request")
+        }
         return backend.Result{}, err
     }
     defer resp.Body.Close()
@@ -426,7 +432,16 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
         }
     }
     if err := sc.Err(); err != nil && text.Len() == 0 {
+        if ctx.Err() == context.Canceled {
+            if text.Len() > 0 {
+                return backend.Result{Text: text.String(), Status: "STOPPED"}, nil
+            }
+            return backend.Result{}, fmt.Errorf("stopped by request")
+        }
         return backend.Result{}, fmt.Errorf("stream: %v", err)
+    }
+    if ctx.Err() == context.Canceled && text.Len() > 0 {
+        return backend.Result{Text: text.String(), Status: "STOPPED"}, nil
     }
     a.logf("agyapi: %s %s finished in %.1fs, %d chars, finish=%s", c.ID, model, time.Since(t0).Seconds(), backend.Chars(text.String()), finish)
     status := "SUCCESS"

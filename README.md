@@ -28,6 +28,7 @@ chunk acknowledges the request and `: openmini phase=...` comments report submit
 | `GET /v1/models` | all backend models, prefixed |
 | `GET /usage` (`?format=text`) | remaining quota per backend |
 | `GET /status` (`?format=text`) | what every request is doing: queued, submitted, generating, with elapsed time and characters so far |
+| `POST /requests/stop?id=` | cancel a running request |
 | `GET /health` | backend readiness |
 | `GET /debug/web/html`, `/debug/web/screenshot` | the live Gemini page, for fixing selectors |
 
