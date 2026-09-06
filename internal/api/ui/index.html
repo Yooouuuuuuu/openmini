@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>openmini</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --fg:#1b1f24; --muted:#6b7280; --line:#e5e7eb; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; --accent:#2563eb; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --card:#171a21; --fg:#e6e8eb; --muted:#9aa3ad; --line:#2a2f3a; --ok:#4ade80; --bad:#f87171; --warn:#fbbf24; --accent:#60a5fa; } }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans TC",sans-serif; }
+  header { padding:16px 20px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:14px; flex-wrap:wrap }
+  header h1 { margin:0; font-size:18px } header .sub { color:var(--muted) }
+  main { padding:16px 20px; display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .card h2 { margin:0 0 6px; font-size:15px; display:flex; align-items:center; gap:10px }
+  .card h2 .tag { font-weight:normal; color:var(--muted); font-size:12px }
+  .row { display:flex; justify-content:space-between; gap:12px; padding:5px 0; border-top:1px solid var(--line) }
+  .row:first-of-type { border-top:0 }
+  .k { color:var(--muted) } .v { text-align:right; word-break:break-word }
+  .bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin-top:4px }
+  .bar > i { display:block; height:100%; background:var(--accent) }
+  .bar.warn > i { background:var(--warn) } .bar.bad > i { background:var(--bad) }
+  button { cursor:pointer; border:1px solid var(--line); background:transparent; color:var(--fg); border-radius:8px; padding:6px 10px; font:inherit }
+  button:hover { border-color:var(--accent) } button[disabled] { opacity:.5; cursor:default }
+  .foot { margin-top:8px; display:flex; justify-content:space-between; align-items:center; color:var(--muted); font-size:12px }
+  .ok { color:var(--ok) } .bad { color:var(--bad) } .muted { color:var(--muted) }
+  pre { white-space:pre-wrap; margin:0; font-size:12px; color:var(--muted) }
+  table { width:100%; border-collapse:collapse; font-size:13px } td,th { text-align:left; padding:4px 6px; border-top:1px solid var(--line) } th { color:var(--muted); font-weight:normal; border-top:0 }
+  td.num { text-align:right }
+</style>
+</head>
+<body>
+<header>
+  <h1>openmini</h1>
+  <span class="sub" id="base"></span>
+  <span class="sub" id="health"></span>
+</header>
+<main id="cards"></main>
+<script>
+const cards = document.getElementById('cards');
+const backends = ['web','agy','agyapi'];
+const state = {};
+
+function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
+function fmtTime(iso){ if(!iso) return 'never'; const d=new Date(iso); return isNaN(d)?iso:d.toLocaleString(); }
+function pct(s){ const m=/(\d{1,3})\s*%/.exec(String(s||'')); return m?parseInt(m[1],10):null; }
+function bar(used){ if(used==null) return ''; const cls = used>=90?'bad':used>=70?'warn':''; return `<div class="bar ${cls}"><i style="width:${Math.min(100,used)}%"></i></div>`; }
+
+function renderBackend(name, entry){
+  const body = [];
+  if (!entry) body.push('<div class="muted">Not loaded yet. Press Refresh.</div>');
+  else if (entry.error) body.push(`<div class="bad">${escapeHtml(entry.error)}</div>`);
+  else {
+    const d = entry.data;
+    if (name === 'web' && d && !Array.isArray(d)) {
+      const cu = pct(d.current_used), wu = pct(d.weekly_used);
+      body.push(row('Model in use', d.current_model || '?'));
+      if (d.unavailable && d.unavailable.length) body.push(row('Locked (limit reached)', `<span class="bad">${escapeHtml(d.unavailable.join(', '))}</span>`));
+      body.push(row('5-hour window used', d.current_used ? `${escapeHtml(d.current_used)}<br><span class="muted">resets ${escapeHtml(d.current_resets||'?')}</span>${bar(cu)}` : '<span class="muted">not read</span>'));
+      body.push(row('Weekly used', d.weekly_used ? `${escapeHtml(d.weekly_used)}<br><span class="muted">resets ${escapeHtml(d.weekly_resets||'?')}</span>${bar(wu)}` : '<span class="muted">not read</span>'));
+      if (d.panel_error) body.push(row('Panel', `<span class="bad">${escapeHtml(d.panel_error)}</span>`));
+    } else if (Array.isArray(d)) {
+      const rows = d.map(r => {
+        const used = r.remaining ? 100 - (pct(r.remaining) ?? 0) : null;
+        return `<tr><td>${escapeHtml(r.pool||'')}</td><td>${escapeHtml(r.window||'')}</td><td class="num">${escapeHtml(r.remaining||'')}</td><td>${escapeHtml(r.resets_in||r.resets_at||'')}</td></tr>`;
+      }).join('');
+      body.push(`<table><tr><th>pool / model</th><th>window</th><th>left</th><th>resets in</th></tr>${rows}</table>`);
+    } else {
+      body.push(`<pre>${escapeHtml(JSON.stringify(d, null, 1))}</pre>`);
+    }
+  }
+  const at = entry ? fmtTime(entry.at) : 'never';
+  return `
+    <div class="card" id="card-${name}">
+      <h2>${name} <span class="tag">${labelFor(name)}</span></h2>
+      ${body.join('')}
+      <div class="foot"><span>updated ${at}</span><button onclick="refresh('${name}')" id="btn-${name}">Refresh</button></div>
+    </div>`;
+}
+function labelFor(n){ return {web:'Gemini app in the browser', agy:'Antigravity CLI (harness)', agyapi:'Antigravity service (direct)'}[n] || ''; }
+function row(k,v){ return `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`; }
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function renderRequests(d){
+  const active = (d && d.active) || [], recent = (d && d.recent) || [];
+  const line = r => `<tr><td>${escapeHtml(r.backend)}</td><td>${escapeHtml(r.model||'default')}</td><td>${escapeHtml(r.phase)}</td><td class="num">${Math.round(r.elapsed_s)}s</td><td class="num">${r.prompt_chars}</td><td class="num">${r.reply_chars}</td><td class="muted">${escapeHtml(r.note||'')}</td></tr>`;
+  const table = rows => `<table><tr><th>backend</th><th>model</th><th>phase</th><th>time</th><th>prompt</th><th>reply</th><th>note</th></tr>${rows}</table>`;
+  return `
+    <div class="card" id="card-requests" style="grid-column:1/-1">
+      <h2>Requests <span class="tag">${active.length} active</span></h2>
+      ${active.length ? table(active.map(line)) : '<div class="muted">nothing running</div>'}
+      ${recent.length ? `<div class="muted" style="margin-top:8px">recent</div>${table(recent.slice(0,10).map(line))}` : ''}
+      <div class="foot"><span>${d && d.checked_at ? 'updated '+fmtTime(d.checked_at) : ''}</span><button onclick="loadRequests()">Refresh</button></div>
+    </div>`;
+}
+
+function render(){
+  cards.innerHTML = backends.map(n => renderBackend(n, state[n])).join('') + renderRequests(state.requests);
+}
+async function refresh(name){
+  const b = document.getElementById('btn-'+name); if (b) { b.disabled = true; b.textContent = 'Refreshing…'; }
+  try {
+    const r = await fetch('usage/refresh?backend='+name, {method:'POST'});
+    const j = await r.json();
+    state[name] = j[name] || {error: j.error || 'no data'};
+  } catch (e) { state[name] = {error: String(e)}; }
+  render();
+}
+async function loadRequests(){
+  try { state.requests = await (await fetch('status')).json(); } catch(e) { state.requests = null; }
+  render();
+}
+async function init(){
+  document.getElementById('base').textContent = location.origin + '/v1';
+  try {
+    const h = await (await fetch('health')).json();
+    document.getElementById('health').innerHTML = Object.entries(h.backends||{}).map(([k,v]) => `${k}: <span class="${v==='ok'?'ok':'bad'}">${escapeHtml(v)}</span>`).join(' · ');
+  } catch(e) {}
+  // cached values only: nothing is fetched from the backends on entry
+  try {
+    const c = await (await fetch('usage/cached')).json();
+    for (const n of backends) if (c[n]) state[n] = c[n];
+  } catch(e) {}
+  render();
+}
+init();
+</script>
+</body>
+</html>

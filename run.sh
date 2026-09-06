@@ -42,8 +42,9 @@ tmux new-session -d -s "$SESSION" -c "$PWD" -e "DISPLAY=${DISPLAY:-:0}" \
 port=$(grep -E '^port *=' config.toml | head -1 | sed 's/[^0-9]//g'); port=${port:-18000}
 echo "Started.  Attach: tmux attach -t $SESSION   Stop: tmux kill-session -t $SESSION"
 echo "Base URL:  http://localhost:$port/v1"
+echo "Usage UI:  http://localhost:$port/"
 if command -v tailscale >/dev/null 2>&1; then
     name=$(tailscale status --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null)
-    [ -n "$name" ] && echo "Tailnet:   http://$name:$port/v1"
+    [ -n "$name" ] && echo "Tailnet:   http://$name:$port/v1   (UI: http://$name:$port/)"
 fi
 echo "Quota:     ./openmini usage      State: ./openmini status"

@@ -22,6 +22,8 @@ chunk acknowledges the request and `: openmini phase=...` comments report submit
 
 | Endpoint | Purpose |
 |---|---|
+| `GET /` | usage page: one card per backend with its own Refresh button; nothing is fetched on load except cached values |
+| `GET /usage/cached`, `POST /usage/refresh?backend=` | the cache behind that page |
 | `POST /v1/chat/completions` | OpenAI chat completions |
 | `GET /v1/models` | all backend models, prefixed |
 | `GET /usage` (`?format=text`) | remaining quota per backend |

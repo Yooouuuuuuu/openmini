@@ -5,6 +5,7 @@ package api
 import (
     "bufio"
     "crypto/rand"
+    _ "embed"
     "encoding/hex"
     "encoding/json"
     "fmt"
@@ -24,7 +25,19 @@ import (
     "openmini/internal/state"
 )
 
+//go:embed ui/index.html
+var uiHTML string
+
+// usageEntry is the last known usage of one backend; refreshed only on request.
+type usageEntry struct {
+    Data  any    `json:"data,omitempty"`
+    Error string `json:"error,omitempty"`
+    At    string `json:"at"`
+}
+
 type Server struct {
+    usageMu    sync.Mutex
+    usageCache map[string]usageEntry
     recentMu sync.Mutex
     recent   []chatRequest // last few request bodies, memory only, for /tools/policy-bisect?last=1
     cfg      *config.Config
@@ -36,7 +49,7 @@ type Server struct {
 }
 
 func New(cfg *config.Config, log *logging.Logger, backends map[string]backend.Backend, webDebug *web.Web) *Server {
-    return &Server{cfg: cfg, log: log, st: state.New(), backends: backends, webDebug: webDebug, started: time.Now()}
+    return &Server{cfg: cfg, log: log, st: state.New(), backends: backends, webDebug: webDebug, started: time.Now(), usageCache: map[string]usageEntry{}}
 }
 
 func (s *Server) Listen() error {
@@ -55,6 +68,13 @@ func (s *Server) Listen() error {
         return err
     })
     app.Use(s.auth)
+    app.Get("/", func(c *fiber.Ctx) error {
+        c.Set("Content-Type", "text/html; charset=utf-8")
+        return c.SendString(uiHTML)
+    })
+    app.Get("/usage/cached", s.handleUsageCached)
+    app.Post("/usage/refresh", s.handleUsageRefresh)
+    app.Get("/usage/refresh", s.handleUsageRefresh)
     app.Get("/health", s.handleHealth)
     app.Get("/status", s.handleStatus)
     app.Get("/v1/models", s.handleModels)
@@ -216,11 +236,58 @@ func (s *Server) handleModels(c *fiber.Ctx) error {
     return c.JSON(fiber.Map{"object": "list", "data": data})
 }
 
+// handleUsageCached returns the last known usage per backend without
+// touching any backend.
+func (s *Server) handleUsageCached(c *fiber.Ctx) error {
+    s.usageMu.Lock()
+    defer s.usageMu.Unlock()
+    out := fiber.Map{}
+    for k, v := range s.usageCache {
+        out[k] = v
+    }
+    return c.JSON(out)
+}
+
+// handleUsageRefresh fetches usage for one backend (?backend=web|agy|agyapi)
+// or all of them, stores it, and returns the refreshed entries.
+func (s *Server) handleUsageRefresh(c *fiber.Ctx) error {
+    want := c.Query("backend")
+    out := fiber.Map{}
+    for name, b := range s.backends {
+        if want != "" && want != name {
+            continue
+        }
+        e := usageEntry{At: time.Now().Format(time.RFC3339)}
+        if u, err := b.Usage(); err != nil {
+            e.Error = err.Error()
+        } else {
+            e.Data = u
+        }
+        s.usageMu.Lock()
+        s.usageCache[name] = e
+        s.usageMu.Unlock()
+        out[name] = e
+    }
+    if want != "" && out[want] == nil {
+        return c.Status(404).JSON(fiber.Map{"error": "unknown or disabled backend " + want})
+    }
+    return c.JSON(out)
+}
+
 func (s *Server) handleUsage(c *fiber.Ctx) error {
     out := fiber.Map{}
     var text strings.Builder
     for name, b := range s.backends {
         u, err := b.Usage()
+        e := usageEntry{At: time.Now().Format(time.RFC3339)}
+        if err != nil {
+            e.Error = err.Error()
+        } else {
+            e.Data = u
+        }
+        s.usageMu.Lock()
+        s.usageCache[name] = e
+        s.usageMu.Unlock()
         if err != nil {
             out[name] = fiber.Map{"error": err.Error()}
             fmt.Fprintf(&text, "%s: %s\n", name, err.Error())
