@@ -368,10 +368,10 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
     // oversize_action = "web" such prompts go to the web backend instead,
     // which delivers them as a file attachment.
     rerouted := ""
-    if b.Name() == "agy" && len(full) > agy.MaxMessageBytes && s.cfg.Agy.OversizeAction == "web" {
-        if w, ok := s.backends["web"]; ok && w.Ready() == nil {
-            rerouted = fmt.Sprintf("prompt is %d bytes, above agy's %d-byte message cap; sent to the web backend instead", len(full), agy.MaxMessageBytes)
-            b, model = w, ""
+    if act := s.cfg.Agy.OversizeAction; b.Name() == "agy" && len(full) > agy.MaxMessageBytes && (act == "web" || act == "agyapi") {
+        if alt, ok := s.backends[act]; ok && alt.Ready() == nil {
+            rerouted = fmt.Sprintf("prompt is %d bytes, above agy's %d-byte message cap; sent to the %s backend instead", len(full), agy.MaxMessageBytes, act)
+            b, model = alt, ""
         }
     }
     s.st.Start(id, b.Name(), model, backend.Chars(full), req.Stream)
@@ -430,11 +430,13 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
     c.Set("X-Accel-Buffering", "no")
     c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
         var mu sync.Mutex
+        var lastWrite time.Time
         write := func(line string) {
             mu.Lock()
             defer mu.Unlock()
             w.WriteString(line)
             w.Flush()
+            lastWrite = time.Now()
         }
         send := func(v any) {
             j, _ := json.Marshal(v)
@@ -452,6 +454,24 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
         }
         sent := ""
         t0 := time.Now()
+        // keep-alive comments every 15s while nothing else is written, so
+        // clients and phones do not drop a slow but healthy request
+        done := make(chan struct{})
+        go func() {
+            t := time.NewTicker(15 * time.Second)
+            defer t.Stop()
+            for {
+                select {
+                case <-done:
+                    return
+                case <-t.C:
+                    if time.Since(lastWrite) >= 15*time.Second {
+                        write(": openmini keepalive\n\n")
+                    }
+                }
+            }
+        }()
+        defer close(done)
         call.OnPhase = func(p, note string) {
             if p == "model" || p == "note" {
                 s.st.Update(id, state.Queued, 0, note)

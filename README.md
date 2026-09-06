@@ -3,7 +3,10 @@
 Your Google AI subscription as an OpenAI-compatible endpoint. Two backends behind one port:
 
 - **web**: drives gemini.google.com in a signed-in browser (the Gemini app quota).
-- **agy**: runs the Antigravity CLI with a tool-less agent (the Antigravity quota, with visible usage).
+- **agyapi**: calls the Antigravity backend service directly with agy's signed-in token (the Antigravity quota,
+  per-model usage, no message cap, real token counts). The recommended backend for long prompts.
+- **agy**: runs the Antigravity CLI with a tool-less agent (same quota, but the harness caps messages at 192,000
+  bytes and adds ~10k tokens of its own prompt per call).
 
 ```bash
 curl http://localhost:18000/v1/chat/completions \
@@ -12,7 +15,7 @@ curl http://localhost:18000/v1/chat/completions \
        "messages": [{"role": "user", "content": "Write a two-sentence story about a cat who learns to sail."}]}'
 ```
 
-Model names pick the backend: `web/3.1 Pro`, `web/3.8 Flash`, `agy/gemini-3.1-pro-low`, `agy/claude-sonnet-4-6`,
+Model names pick the backend: `agyapi/gemini-3.1-pro-low`, `agyapi/claude-sonnet-4-6`, `web/3.1 Pro`, `agy/gemini-3.1-pro-low`,
 or `web/default` and `agy/default`. A bare name that exists in exactly one backend routes there; anything else goes
 to `default_backend`. `GET /v1/models` lists everything. Add `"stream": true` for server-sent events; the first
 chunk acknowledges the request and `: openmini phase=...` comments report submitted and generating before the text.
@@ -36,7 +39,8 @@ chunk acknowledges the request and `: openmini phase=...` comments report submit
 ```
 
 Sign-in is done once by hand: for the web backend set `headless = false`, start, sign in to Google in the window,
-then switch back to headless; for agy run `agy` once in a terminal. `config.toml` is yours and not committed;
+then switch back to headless; for agy and agyapi run `agy` once in a terminal (agyapi reuses agy's token file and
+lets agy refresh it). `config.toml` is yours and not committed;
 `config.example.toml` is the template. Logs go to `logs/<date>.log`, one file per day, old ones removed; they hold
 ids, sizes and timings, never prompt or reply text.
 

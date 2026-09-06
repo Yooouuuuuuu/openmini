@@ -16,6 +16,7 @@ import (
     "openmini/internal/api"
     "openmini/internal/backend"
     "openmini/internal/backend/agy"
+    "openmini/internal/backend/agyapi"
     "openmini/internal/backend/web"
     "openmini/internal/config"
     "openmini/internal/logging"
@@ -71,6 +72,15 @@ func serveCmd() *gcli.Command {
                     logger.Printf("agy: %d models", len(a.Models()))
                 }
                 backends["agy"] = a
+            }
+            if cfg.AgyAPI.Enabled {
+                x := agyapi.New(cfg.AgyAPI, cfg.Server.Timeout, logger.Printf)
+                if err := x.Ready(); err != nil {
+                    logger.Printf("agyapi backend: %v (enabled, but not ready)", err)
+                } else {
+                    logger.Printf("agyapi: %d models", len(x.Models()))
+                }
+                backends["agyapi"] = x
             }
             if len(backends) == 0 {
                 return fmt.Errorf("no backend enabled in %s", cfgPath)
@@ -193,6 +203,14 @@ func doctorCmd() *gcli.Command {
                     report(false, "agy", err.Error())
                 } else {
                     report(true, "agy", fmt.Sprintf("signed in, %d models", len(a.Models())))
+                }
+            }
+            if cfg.AgyAPI.Enabled {
+                x := agyapi.New(cfg.AgyAPI, 0, func(string, ...any) {})
+                if err := x.Ready(); err != nil {
+                    report(false, "agyapi", err.Error())
+                } else {
+                    report(true, "agyapi", fmt.Sprintf("token ok, project resolved, %d models", len(x.Models())))
                 }
             }
             if resp, err := http.Get(fmt.Sprintf("http://localhost:%d/health", cfg.Server.Port)); err == nil {

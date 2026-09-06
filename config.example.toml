@@ -63,3 +63,23 @@ parallel = 1
 # prompts to the web backend (file attachment) with a note; "warn" sends them to
 # agy anyway and reports the cut; "fail" refuses them.
 oversize_action = "web"
+
+[agyapi]
+# Talks to the Antigravity backend service directly with agy's stored token:
+# no agent harness, so no 192,000-byte cap, no tool schemas, no system prompt
+# overhead, real streaming, and per-model quota. Sign in with agy once; the
+# token is refreshed by running agy when it nears expiry.
+enabled = true
+token_file = "~/.gemini/antigravity-cli/antigravity-oauth-token"
+agy_binary = "~/.local/bin/agy"
+user_agent = "antigravity/1.13.0 linux/amd64"
+ide_type = "ANTIGRAVITY"
+# The CLI's token is entitled on the daily host (what agy itself calls); the
+# production host cloudcode-pa.googleapis.com answers 429 for generation.
+endpoint = "https://daily-cloudcode-pa.googleapis.com"
+# project = ""    # normally resolved automatically
+# Default model id, as listed by the service (agy's slugs, e.g. gemini-3.1-pro-low).
+model = "gemini-3.1-pro-low"
+# Subscription entitlement the requests draw on. GOOGLE_ONE_AI is the Google AI
+# Pro/Ultra plan; set to [] to send none.
+credit_types = ["GOOGLE_ONE_AI"]

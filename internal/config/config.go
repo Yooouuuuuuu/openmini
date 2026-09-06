@@ -15,6 +15,7 @@ type Config struct {
     Prompt Prompt `toml:"prompt"`
     Web    Web    `toml:"web"`
     Agy    Agy    `toml:"agy"`
+    AgyAPI AgyAPI `toml:"agyapi"`
 }
 
 type Server struct {
@@ -59,9 +60,22 @@ type Agy struct {
     Effort    string `toml:"effort"`
     Workspace string `toml:"workspace"`
     Parallel  int    `toml:"parallel"`
-    // "web": hand oversized prompts to the web backend; "warn": send them to agy
-    // anyway and report the dropped tail; "fail": refuse them.
+    // "agyapi" or "web": hand oversized prompts to that backend; "warn": send
+    // them to agy anyway and report the dropped tail; "fail": refuse them.
     OversizeAction string `toml:"oversize_action"`
+}
+
+type AgyAPI struct {
+    Enabled   bool     `toml:"enabled"`
+    TokenFile string   `toml:"token_file"` // agy's stored OAuth token
+    AgyBinary string   `toml:"agy_binary"` // only used to refresh the token
+    UserAgent string   `toml:"user_agent"`
+    IDEType   string   `toml:"ide_type"`
+    Endpoint  string   `toml:"endpoint"`
+    Project   string   `toml:"project"` // override; empty = ask loadCodeAssist
+    Model     string   `toml:"model"`   // default model id, agy-style suffix allowed
+    Models    []string `toml:"models"`  // fallback list when the service lists none
+    CreditTypes []string `toml:"credit_types"` // subscription entitlements to use, e.g. ["GOOGLE_ONE_AI"]
 }
 
 // Load reads path and fills in defaults for anything left out.
@@ -112,6 +126,31 @@ func (c *Config) applyDefaults() {
     a := &c.Agy
     if a.Binary == "" {
         a.Binary = "agy"
+    }
+    x := &c.AgyAPI
+    if x.TokenFile == "" {
+        x.TokenFile = "~/.gemini/antigravity-cli/antigravity-oauth-token"
+    }
+    if x.AgyBinary == "" {
+        x.AgyBinary = a.Binary
+    }
+    if x.UserAgent == "" {
+        x.UserAgent = "antigravity/1.13.0 linux/amd64"
+    }
+    if x.IDEType == "" {
+        x.IDEType = "ANTIGRAVITY"
+    }
+    if x.Endpoint == "" {
+        x.Endpoint = "https://daily-cloudcode-pa.googleapis.com"
+    }
+    if x.Model == "" {
+        x.Model = "gemini-3.1-pro-high"
+    }
+    if x.CreditTypes == nil {
+        x.CreditTypes = []string{"GOOGLE_ONE_AI"}
+    }
+    if len(x.Models) == 0 {
+        x.Models = []string{"gemini-3.1-pro-high", "gemini-3.1-pro-low", "gemini-3.8-flash-high", "gemini-3.8-flash-low", "gemini-3.5-flash-lite"}
     }
     if a.Workspace == "" {
         a.Workspace = "./data/agy-workspace"
@@ -192,4 +231,24 @@ parallel = 1
 # prompts to the web backend (file attachment) with a note; "warn" sends them to
 # agy anyway and reports the cut; "fail" refuses them.
 oversize_action = "web"
+
+[agyapi]
+# Talks to the Antigravity backend service directly with agy's stored token:
+# no agent harness, so no 192,000-byte cap, no tool schemas, no system prompt
+# overhead, real streaming, and per-model quota. Sign in with agy once; the
+# token is refreshed by running agy when it nears expiry.
+enabled = true
+token_file = "~/.gemini/antigravity-cli/antigravity-oauth-token"
+agy_binary = "~/.local/bin/agy"
+user_agent = "antigravity/1.13.0 linux/amd64"
+ide_type = "ANTIGRAVITY"
+# The CLI's token is entitled on the daily host (what agy itself calls); the
+# production host cloudcode-pa.googleapis.com answers 429 for generation.
+endpoint = "https://daily-cloudcode-pa.googleapis.com"
+# project = ""    # normally resolved automatically
+# Default model id, as listed by the service (agy's slugs, e.g. gemini-3.1-pro-low).
+model = "gemini-3.1-pro-low"
+# Subscription entitlement the requests draw on. GOOGLE_ONE_AI is the Google AI
+# Pro/Ultra plan; set to [] to send none.
+credit_types = ["GOOGLE_ONE_AI"]
 `
