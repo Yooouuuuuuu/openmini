@@ -79,6 +79,12 @@ func (s *Server) Listen() error {
             c.Set("Content-Type", "text/plain; charset=utf-8")
             return c.SendString(h)
         })
+        app.Get("/debug/web/laststream", func(c *fiber.Ctx) error {
+            b, u := s.webDebug.LastStream()
+            c.Set("Content-Type", "text/plain; charset=utf-8")
+            c.Set("X-Stream-Url", u)
+            return c.Send(b)
+        })
         app.Get("/debug/web/copy", func(c *fiber.Ctx) error {
             t, err := s.webDebug.CopyLastReply()
             if err != nil {

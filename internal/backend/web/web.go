@@ -4,6 +4,8 @@
 package web
 
 import (
+    "bytes"
+    "encoding/json"
     "fmt"
     "path/filepath"
     "regexp"
@@ -110,6 +112,10 @@ type Web struct {
     entryNotes   map[string]string // description text shown under a picker entry (e.g. reset hint)
     usageCache   map[string]any
     usageRead    time.Time
+
+    streamMu   sync.Mutex
+    lastStream []byte // body of the last StreamGenerate response seen on the page
+    streamURL  string
     currentModel string
     desiredModel string
     menuRead     time.Time
@@ -277,6 +283,23 @@ func (w *Web) Start() error {
     } else if w.page, err = w.ctx.NewPage(); err != nil {
         return fmt.Errorf("new page: %v", err)
     }
+    // Keep the raw model output: the page's streaming reply carries the text
+    // before any rendering strips tags from it.
+    w.page.On("response", func(r pw.Response) {
+        u := r.URL()
+        if !strings.Contains(u, "StreamGenerate") {
+            return
+        }
+        go func() {
+            body, err := r.Body()
+            if err != nil {
+                return
+            }
+            w.streamMu.Lock()
+            w.lastStream, w.streamURL = body, u
+            w.streamMu.Unlock()
+        }()
+    })
     if _, err = w.page.Goto(geminiURL, pw.PageGotoOptions{WaitUntil: pw.WaitUntilStateDomcontentloaded}); err != nil {
         return fmt.Errorf("goto gemini: %v", err)
     }
@@ -342,6 +365,14 @@ func (w *Web) SettingsMenuHTML(item string) (string, error) {
     time.Sleep(300 * time.Millisecond)
     w.page.Keyboard().Press("Escape")
     return html, err
+}
+
+// LastStream returns the body of the last streaming reply captured from the
+// page's network traffic (diagnostics).
+func (w *Web) LastStream() ([]byte, string) {
+    w.streamMu.Lock()
+    defer w.streamMu.Unlock()
+    return append([]byte(nil), w.lastStream...), w.streamURL
 }
 
 // Screenshot returns a PNG of the current page.
@@ -677,6 +708,9 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
     }
     responses := w.page.Locator(replySel)
     before, _ := responses.Count()
+    w.streamMu.Lock()
+    w.lastStream = nil
+    w.streamMu.Unlock()
     if err := box.Press("Enter"); err != nil {
         return "", fmt.Errorf("sending prompt: %v", err)
     }
@@ -748,6 +782,16 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
             generating := w.exists(w.page.Locator(busyIconSel))
             if busy != "true" && !generating && last != "" && time.Since(lastChange) > 500*time.Millisecond {
                 w.logf("web: %s reply finished after %.1fs (%d chars)", c.ID, time.Since(t0).Seconds(), backend.Chars(last))
+                if w.cfg.ReplySource == "raw" {
+                    // the network capture may lag the render by a moment
+                    for i := 0; i < 20; i++ {
+                        if t := w.rawReply(); t != "" {
+                            return t, nil
+                        }
+                        time.Sleep(150 * time.Millisecond)
+                    }
+                    w.logf("web: no raw stream captured; using the rendered reply")
+                }
                 if w.cfg.ReplySource == "copy" {
                     if t, err := w.copyReply(); err == nil {
                         return t, nil
@@ -756,6 +800,13 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
                     }
                 }
                 return last, nil
+            }
+            if !generating && last == "" && time.Since(start) > 5*time.Second {
+                // nothing rendered (e.g. a reply made of tags the page strips): take the raw text
+                if t := w.rawReply(); t != "" {
+                    w.logf("web: %s page rendered nothing; using the raw stream text (%d chars)", c.ID, backend.Chars(t))
+                    return t, nil
+                }
             }
             if busy == "true" && !generating && last == "" && time.Since(start) > deadReplyAfter {
                 return "", errDeadReply
@@ -804,6 +855,75 @@ func (w *Web) copyReply() (string, error) {
         }
     }
     return "", fmt.Errorf("clipboard stayed empty after copy")
+}
+
+// rawFromStream pulls the model's own text out of the page's streaming reply.
+// The body is Google's chunked format: a ")]}'" guard, then JSON arrays of
+// ["wrb.fr", null, "<inner JSON>"]; in the inner value the cumulative answer
+// sits at [4][0][1][0]. The last non-empty occurrence is the full reply.
+func rawFromStream(body []byte) string {
+    if i := bytes.IndexByte(body, '\n'); i >= 0 && bytes.HasPrefix(body, []byte(")]}'")) {
+        body = body[i+1:]
+    }
+    text := ""
+    pos := 0
+    for pos < len(body) {
+        j := bytes.IndexByte(body[pos:], '[')
+        if j < 0 {
+            break
+        }
+        dec := json.NewDecoder(bytes.NewReader(body[pos+j:]))
+        var outer []any
+        if err := dec.Decode(&outer); err != nil {
+            pos += j + 1
+            continue
+        }
+        pos += j + int(dec.InputOffset())
+        for _, el := range outer {
+            arr, _ := el.([]any)
+            if len(arr) < 3 {
+                continue
+            }
+            if tag, _ := arr[0].(string); tag != "wrb.fr" {
+                continue
+            }
+            innerJSON, _ := arr[2].(string)
+            if innerJSON == "" {
+                continue
+            }
+            var inner []any
+            if json.Unmarshal([]byte(innerJSON), &inner) != nil {
+                continue
+            }
+            if t := pick(inner, 4, 0, 1, 0); t != "" {
+                text = t
+            }
+        }
+    }
+    return text
+}
+
+// pick walks nested arrays by index and returns the string found there.
+func pick(v any, path ...int) string {
+    for _, i := range path {
+        arr, ok := v.([]any)
+        if !ok || i >= len(arr) {
+            return ""
+        }
+        v = arr[i]
+    }
+    s, _ := v.(string)
+    return s
+}
+
+// rawReply returns the model's text captured from the network, if any.
+func (w *Web) rawReply() string {
+    w.streamMu.Lock()
+    defer w.streamMu.Unlock()
+    if len(w.lastStream) == 0 {
+        return ""
+    }
+    return strings.TrimSpace(rawFromStream(w.lastStream))
 }
 
 func (w *Web) markdownOf(html string) string {

@@ -116,7 +116,7 @@ func (c *Config) applyDefaults() {
         w.InputMethod = "paste"
     }
     if w.ReplySource == "" {
-        w.ReplySource = "copy"
+        w.ReplySource = "raw"
     }
     if w.LongPromptMode == "" {
         w.LongPromptMode = "paste"
@@ -210,8 +210,9 @@ profile_dir = "./data/browser-profile"
 model = "3.1 Pro"
 # "paste" carries long multi-line prompts intact; "insert" is capped at ~32k by the page.
 input_method = "paste"
-# "copy" reads the reply from Gemini's copy button (exact Markdown); "html" converts the rendered reply.
-reply_source = "copy"
+# "raw" takes the model's own text from the page's network stream (tags kept, nothing
+# stripped); "copy" uses Gemini's copy button; "html" converts the rendered reply.
+reply_source = "raw"
 # Prompts up to max_inline_chars are pasted (verified intact up to ~100k characters);
 # longer ones use long_prompt_mode: "attach" (upload as a text file, verified at 104k),
 # "split" (several messages), or "paste" (send anyway; the backend drops very long ones).
