@@ -3,47 +3,47 @@
 package backend
 
 import (
-    "context"
-    "unicode/utf8"
+	"context"
+	"unicode/utf8"
 )
 
 // Call is one prompt for a backend.
 type Call struct {
-    ID       string
-    Ctx      context.Context // cancelled to stop the request; may be nil
-    Model    string // backend-specific model id; empty = backend default
-    Prompt   string // everything, in one string
-    Context  string // everything except the final user message (for attach/split modes)
-    LastUser string // the final user message when the last message was a user turn
-    // MaxTokens caps the reply when > 0 (used for cheap probes). Backends
-    // that cannot honour it ignore it.
-    MaxTokens int
-    // OnText receives the reply text so far (cumulative), as it streams. May be nil.
-    OnText func(soFar string)
-    // OnPhase reports "submitted" and "generating" with an optional note. May be nil.
-    OnPhase func(phase, note string)
+	ID       string
+	Ctx      context.Context // cancelled to stop the request; may be nil
+	Model    string          // backend-specific model id; empty = backend default
+	Prompt   string          // everything, in one string
+	Context  string          // everything except the final user message (for attach/split modes)
+	LastUser string          // the final user message when the last message was a user turn
+	// MaxTokens caps the reply when > 0 (used for cheap probes). Backends
+	// that cannot honour it ignore it.
+	MaxTokens int
+	// OnText receives the reply text so far (cumulative), as it streams. May be nil.
+	OnText func(soFar string)
+	// OnPhase reports "submitted" and "generating" with an optional note. May be nil.
+	OnPhase func(phase, note string)
 }
 
 // Result is a backend's answer. Text is delivered even when Status is not a
 // success, so the client sees whatever the backend said.
 type Result struct {
-    Text   string
-    Status string
-    Usage  map[string]int
+	Text   string
+	Status string
+	Usage  map[string]int
 }
 
 type Backend interface {
-    Name() string
-    // Ready reports whether the backend can serve (signed in, binary found).
-    Ready() error
-    // Models lists the ids this backend accepts, without any prefix.
-    Models() []string
-    // StableStream is true when OnText grows only by appending (safe to stream
-    // immediately); false when partial text can still change shape.
-    StableStream() bool
-    Complete(c Call) (Result, error)
-    // Usage returns backend-specific quota information, or an explanation.
-    Usage() (any, error)
+	Name() string
+	// Ready reports whether the backend can serve (signed in, binary found).
+	Ready() error
+	// Models lists the ids this backend accepts, without any prefix.
+	Models() []string
+	// StableStream is true when OnText grows only by appending (safe to stream
+	// immediately); false when partial text can still change shape.
+	StableStream() bool
+	Complete(c Call) (Result, error)
+	// Usage returns backend-specific quota information, or an explanation.
+	Usage() (any, error)
 }
 
 // Chars counts characters, the unit page limits are measured in.

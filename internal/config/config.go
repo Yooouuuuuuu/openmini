@@ -3,173 +3,173 @@
 package config
 
 import (
-    "fmt"
-    "os"
+	"fmt"
+	"os"
 
-    "github.com/BurntSushi/toml"
+	"github.com/BurntSushi/toml"
 )
 
 type Config struct {
-    Server Server `toml:"server"`
-    Log    Log    `toml:"log"`
-    Prompt Prompt `toml:"prompt"`
-    Web    Web    `toml:"web"`
-    Agy    Agy    `toml:"agy"`
-    AgyAPI AgyAPI `toml:"agyapi"`
+	Server Server `toml:"server"`
+	Log    Log    `toml:"log"`
+	Prompt Prompt `toml:"prompt"`
+	Web    Web    `toml:"web"`
+	Agy    Agy    `toml:"agy"`
+	AgyAPI AgyAPI `toml:"agyapi"`
 }
 
 type Server struct {
-    Port           int      `toml:"port"`
-    DefaultBackend string   `toml:"default_backend"` // backend used when the model name carries no prefix
-    APIKeys        []string `toml:"api_keys"`        // when non-empty, requests must carry one as a Bearer token
-    Timeout        int      `toml:"timeout"`         // seconds to wait for a complete reply; 0 = no limit
+	Port           int      `toml:"port"`
+	DefaultBackend string   `toml:"default_backend"` // backend used when the model name carries no prefix
+	APIKeys        []string `toml:"api_keys"`        // when non-empty, requests must carry one as a Bearer token
+	Timeout        int      `toml:"timeout"`         // seconds to wait for a complete reply; 0 = no limit
 }
 
 type Log struct {
-    Directory string `toml:"directory"`
-    KeepDays  int    `toml:"keep_days"`
+	Directory string `toml:"directory"`
+	KeepDays  int    `toml:"keep_days"`
 }
 
 type Prompt struct {
-    Format          string `toml:"format"`           // "direct" or "structured"
-    Preamble        string `toml:"preamble"`         // text placed before every conversation
-    DiscourageTools bool   `toml:"discourage_tools"` // ask for direct answers without search/code/image tools
+	Format          string `toml:"format"`           // "direct" or "structured"
+	Preamble        string `toml:"preamble"`         // text placed before every conversation
+	DiscourageTools bool   `toml:"discourage_tools"` // ask for direct answers without search/code/image tools
 }
 
 type Web struct {
-    Enabled        bool   `toml:"enabled"`
-    Headless       bool   `toml:"headless"`
-    ProfileDir     string `toml:"profile_dir"`
-    Model          string `toml:"model"`            // picker entry, e.g. "3.1 Pro"; empty leaves the picker alone
-    InputMethod    string `toml:"input_method"`     // "paste" or "insert"
-    ReplySource    string `toml:"reply_source"`     // "copy" or "html"
-    LongPromptMode string `toml:"long_prompt_mode"` // "paste", "attach", "split"
-    MaxInlineChars int    `toml:"max_inline_chars"`
-    AttachName     string `toml:"attach_name"`
-    AttachFillBox  bool   `toml:"attach_fill_box"`
-    StartTimeout   int    `toml:"start_timeout"` // seconds to wait for Gemini to open a reply; 0 = no limit
-    Retries        int    `toml:"retries"`       // extra attempts when Gemini answers with an error notice or refusal
-    UnavailableAction string `toml:"unavailable_action"` // "fail" (default): refuse when the requested model is locked; "fallback": answer with the picker's current model
+	Enabled           bool   `toml:"enabled"`
+	Headless          bool   `toml:"headless"`
+	ProfileDir        string `toml:"profile_dir"`
+	Model             string `toml:"model"`            // picker entry, e.g. "3.1 Pro"; empty leaves the picker alone
+	InputMethod       string `toml:"input_method"`     // "paste" or "insert"
+	ReplySource       string `toml:"reply_source"`     // "copy" or "html"
+	LongPromptMode    string `toml:"long_prompt_mode"` // "paste", "attach", "split"
+	MaxInlineChars    int    `toml:"max_inline_chars"`
+	AttachName        string `toml:"attach_name"`
+	AttachFillBox     bool   `toml:"attach_fill_box"`
+	StartTimeout      int    `toml:"start_timeout"`      // seconds to wait for Gemini to open a reply; 0 = no limit
+	Retries           int    `toml:"retries"`            // extra attempts when Gemini answers with an error notice or refusal
+	UnavailableAction string `toml:"unavailable_action"` // "fail" (default): refuse when the requested model is locked; "fallback": answer with the picker's current model
 }
 
 type Agy struct {
-    Enabled   bool   `toml:"enabled"`
-    Binary    string `toml:"binary"`
-    Agent     string `toml:"agent"`
-    Mode      string `toml:"mode"`
-    Model     string `toml:"model"`
-    Effort    string `toml:"effort"`
-    Workspace string `toml:"workspace"`
-    Parallel  int    `toml:"parallel"`
-    // "agyapi" or "web": hand oversized prompts to that backend; "warn": send
-    // them to agy anyway and report the dropped tail; "fail": refuse them.
-    OversizeAction string `toml:"oversize_action"`
+	Enabled   bool   `toml:"enabled"`
+	Binary    string `toml:"binary"`
+	Agent     string `toml:"agent"`
+	Mode      string `toml:"mode"`
+	Model     string `toml:"model"`
+	Effort    string `toml:"effort"`
+	Workspace string `toml:"workspace"`
+	Parallel  int    `toml:"parallel"`
+	// "agyapi" or "web": hand oversized prompts to that backend; "warn": send
+	// them to agy anyway and report the dropped tail; "fail": refuse them.
+	OversizeAction string `toml:"oversize_action"`
 }
 
 type AgyAPI struct {
-    Enabled   bool     `toml:"enabled"`
-    TokenFile string   `toml:"token_file"` // agy's stored OAuth token
-    AgyBinary string   `toml:"agy_binary"` // only used to refresh the token
-    UserAgent string   `toml:"user_agent"`
-    IDEType   string   `toml:"ide_type"`
-    Endpoint  string   `toml:"endpoint"`
-    Project   string   `toml:"project"` // override; empty = ask loadCodeAssist
-    Model     string   `toml:"model"`   // default model id, agy-style suffix allowed
-    Models    []string `toml:"models"`  // fallback list when the service lists none
-    CreditTypes []string `toml:"credit_types"` // subscription entitlements to use, e.g. ["GOOGLE_ONE_AI"]
-    OfficialPrompt    bool   `toml:"official_prompt"`    // send the Antigravity identity snippet as the first system part
-    SystemInstruction string `toml:"system_instruction"` // optional instruction of your own, sent after it
-    ProbeModel        string `toml:"probe_model"`        // cheap model used by /tools/policy-bisect
+	Enabled           bool     `toml:"enabled"`
+	TokenFile         string   `toml:"token_file"` // agy's stored OAuth token
+	AgyBinary         string   `toml:"agy_binary"` // only used to refresh the token
+	UserAgent         string   `toml:"user_agent"`
+	IDEType           string   `toml:"ide_type"`
+	Endpoint          string   `toml:"endpoint"`
+	Project           string   `toml:"project"`            // override; empty = ask loadCodeAssist
+	Model             string   `toml:"model"`              // default model id, agy-style suffix allowed
+	Models            []string `toml:"models"`             // fallback list when the service lists none
+	CreditTypes       []string `toml:"credit_types"`       // subscription entitlements to use, e.g. ["GOOGLE_ONE_AI"]
+	OfficialPrompt    bool     `toml:"official_prompt"`    // send the Antigravity identity snippet as the first system part
+	SystemInstruction string   `toml:"system_instruction"` // optional instruction of your own, sent after it
+	ProbeModel        string   `toml:"probe_model"`        // cheap model used by /tools/policy-bisect
 }
 
 // Load reads path and fills in defaults for anything left out.
 func Load(path string) (*Config, error) {
-    var c Config
-    if _, err := toml.DecodeFile(path, &c); err != nil {
-        return nil, fmt.Errorf("read %s: %w", path, err)
-    }
-    c.applyDefaults()
-    return &c, nil
+	var c Config
+	if _, err := toml.DecodeFile(path, &c); err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	c.applyDefaults()
+	return &c, nil
 }
 
 func (c *Config) applyDefaults() {
-    if c.Server.Port == 0 {
-        c.Server.Port = 18000
-    }
-    if c.Server.DefaultBackend == "" {
-        c.Server.DefaultBackend = "web"
-    }
-    if c.Log.Directory == "" {
-        c.Log.Directory = "./logs"
-    }
-    if c.Log.KeepDays <= 0 {
-        c.Log.KeepDays = 7
-    }
-    if c.Prompt.Format == "" {
-        c.Prompt.Format = "direct"
-    }
-    w := &c.Web
-    if w.ProfileDir == "" {
-        w.ProfileDir = "./data/browser-profile"
-    }
-    if w.InputMethod == "" {
-        w.InputMethod = "paste"
-    }
-    if w.ReplySource == "" {
-        w.ReplySource = "raw"
-    }
-    if w.LongPromptMode == "" {
-        w.LongPromptMode = "paste"
-    }
-    if w.MaxInlineChars <= 0 {
-        w.MaxInlineChars = 30000
-    }
-    if w.AttachName == "" {
-        w.AttachName = "prompt.txt"
-    }
-    a := &c.Agy
-    if a.Binary == "" {
-        a.Binary = "agy"
-    }
-    x := &c.AgyAPI
-    if x.TokenFile == "" {
-        x.TokenFile = "~/.gemini/antigravity-cli/antigravity-oauth-token"
-    }
-    if x.AgyBinary == "" {
-        x.AgyBinary = a.Binary
-    }
-    if x.UserAgent == "" {
-        x.UserAgent = "antigravity/1.13.0 linux/amd64"
-    }
-    if x.IDEType == "" {
-        x.IDEType = "ANTIGRAVITY"
-    }
-    if x.Endpoint == "" {
-        x.Endpoint = "https://daily-cloudcode-pa.googleapis.com"
-    }
-    if x.Model == "" {
-        x.Model = "gemini-3.1-pro-high"
-    }
-    if x.ProbeModel == "" {
-        x.ProbeModel = "gemini-3.5-flash-low"
-    }
-    if x.CreditTypes == nil {
-        x.CreditTypes = []string{"GOOGLE_ONE_AI"}
-    }
-    if len(x.Models) == 0 {
-        x.Models = []string{"gemini-3.1-pro-high", "gemini-3.1-pro-low", "gemini-3.8-flash-high", "gemini-3.8-flash-low", "gemini-3.5-flash-lite"}
-    }
-    if a.Workspace == "" {
-        a.Workspace = "./data/agy-workspace"
-    }
-    if a.Parallel <= 0 {
-        a.Parallel = 1
-    }
+	if c.Server.Port == 0 {
+		c.Server.Port = 18000
+	}
+	if c.Server.DefaultBackend == "" {
+		c.Server.DefaultBackend = "web"
+	}
+	if c.Log.Directory == "" {
+		c.Log.Directory = "./logs"
+	}
+	if c.Log.KeepDays <= 0 {
+		c.Log.KeepDays = 7
+	}
+	if c.Prompt.Format == "" {
+		c.Prompt.Format = "direct"
+	}
+	w := &c.Web
+	if w.ProfileDir == "" {
+		w.ProfileDir = "./data/browser-profile"
+	}
+	if w.InputMethod == "" {
+		w.InputMethod = "paste"
+	}
+	if w.ReplySource == "" {
+		w.ReplySource = "raw"
+	}
+	if w.LongPromptMode == "" {
+		w.LongPromptMode = "paste"
+	}
+	if w.MaxInlineChars <= 0 {
+		w.MaxInlineChars = 30000
+	}
+	if w.AttachName == "" {
+		w.AttachName = "prompt.txt"
+	}
+	a := &c.Agy
+	if a.Binary == "" {
+		a.Binary = "agy"
+	}
+	x := &c.AgyAPI
+	if x.TokenFile == "" {
+		x.TokenFile = "~/.gemini/antigravity-cli/antigravity-oauth-token"
+	}
+	if x.AgyBinary == "" {
+		x.AgyBinary = a.Binary
+	}
+	if x.UserAgent == "" {
+		x.UserAgent = "antigravity/1.13.0 linux/amd64"
+	}
+	if x.IDEType == "" {
+		x.IDEType = "ANTIGRAVITY"
+	}
+	if x.Endpoint == "" {
+		x.Endpoint = "https://daily-cloudcode-pa.googleapis.com"
+	}
+	if x.Model == "" {
+		x.Model = "gemini-3.1-pro-high"
+	}
+	if x.ProbeModel == "" {
+		x.ProbeModel = "gemini-3.5-flash-low"
+	}
+	if x.CreditTypes == nil {
+		x.CreditTypes = []string{"GOOGLE_ONE_AI"}
+	}
+	if len(x.Models) == 0 {
+		x.Models = []string{"gemini-3.1-pro-high", "gemini-3.1-pro-low", "gemini-3.8-flash-high", "gemini-3.8-flash-low", "gemini-3.5-flash-lite"}
+	}
+	if a.Workspace == "" {
+		a.Workspace = "./data/agy-workspace"
+	}
+	if a.Parallel <= 0 {
+		a.Parallel = 1
+	}
 }
 
 // WriteTemplate writes the example configuration to path.
 func WriteTemplate(path string) error {
-    return os.WriteFile(path, []byte(Template), 0644)
+	return os.WriteFile(path, []byte(Template), 0644)
 }
 
 // Template is config.example.toml. Keep it in sync with the fields above.
