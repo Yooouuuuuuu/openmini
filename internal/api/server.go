@@ -79,6 +79,7 @@ func (s *Server) Listen() error {
     app.Get("/usage/refresh", s.handleUsageRefresh)
     app.Get("/health", s.handleHealth)
     app.Get("/status", s.handleStatus)
+    app.Get("/status/stream", s.handleStatusStream)
     app.Post("/requests/stop", s.handleStop)
     app.Get("/v1/models", s.handleModels)
     app.Post("/v1/chat/completions", s.handleChat)
@@ -159,6 +160,62 @@ func (s *Server) handleHealth(c *fiber.Ctx) error {
 }
 
 // handleStatus reports what every request is doing right now.
+// statusPayload is what /status and /status/stream send.
+func (s *Server) statusPayload() fiber.Map {
+    active, recent := s.st.Snapshot()
+    if active == nil {
+        active = []state.Request{}
+    }
+    if recent == nil {
+        recent = []state.Request{}
+    }
+    return fiber.Map{"active": active, "recent": recent}
+}
+
+// handleStatusStream pushes the status to an open dashboard as server-sent
+// events: once on connect, then whenever a request changes (bursts coalesced
+// to a few per second), with a comment every 20s so idle proxies keep the
+// connection. Nothing is polled.
+func (s *Server) handleStatusStream(c *fiber.Ctx) error {
+    c.Set("Content-Type", "text/event-stream")
+    c.Set("Cache-Control", "no-cache")
+    c.Set("Connection", "keep-alive")
+    c.Set("X-Accel-Buffering", "no")
+    ch, stop := s.st.Subscribe()
+    c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+        defer stop()
+        send := func() bool {
+            b, err := json.Marshal(s.statusPayload())
+            if err != nil {
+                return false
+            }
+            if _, err := fmt.Fprintf(w, "data: %s\n\n", b); err != nil {
+                return false
+            }
+            return w.Flush() == nil
+        }
+        if !send() {
+            return
+        }
+        keep := time.NewTicker(20 * time.Second)
+        defer keep.Stop()
+        for {
+            select {
+            case <-ch:
+                if !send() {
+                    return
+                }
+                time.Sleep(250 * time.Millisecond) // coalesce bursts of updates
+            case <-keep.C:
+                if _, err := fmt.Fprint(w, ": keep\n\n"); err != nil || w.Flush() != nil {
+                    return
+                }
+            }
+        }
+    })
+    return nil
+}
+
 func (s *Server) handleStatus(c *fiber.Ctx) error {
     active, recent := s.st.Snapshot()
     if active == nil {

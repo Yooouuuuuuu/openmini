@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>openmini</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
   :root { color-scheme: dark;
     --bg:#0e1116; --card:#141922; --card2:#131a28; --fg:#e7eaee; --muted:#8a93a0; --dim:#5f6873; --line:#222a35; --hair:#1f242c;
@@ -27,6 +26,8 @@
   button.stop { color:var(--badfg); background:var(--stopbg); border-color:var(--stopline); font-weight:500 }
   button.all { height:34px; padding:0 14px; font-size:13px; font-weight:500 }
   main { padding:18px 24px 28px; display:flex; flex-direction:column; gap:16px }
+  .panel { margin-top:10px } @media (min-width:861px){ .panel { min-height:var(--tiles-h, 0px) } }
+  .live { display:inline-flex; align-items:center; gap:6px } .live .d { width:6px; height:6px; border-radius:50%; background:var(--ok) } .live.off .d { background:var(--warn) }
   .tiles { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px } @media (max-width:860px){ .tiles { grid-template-columns:1fr } }
   .tile, .panel { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:14px }
   .th { display:flex; align-items:center; justify-content:space-between; gap:8px } .th .n { display:flex; align-items:center; gap:10px; min-width:0 }
@@ -64,8 +65,7 @@
 <script>
 const BACKENDS = ['web','agy','agyapi'];
 const SUB = { web:'Gemini app', agy:'Antigravity CLI', agyapi:'Antigravity service, direct' };
-const state = { health:{} };
-let pollTimer = null;
+const state = { health:{}, live:false };
 
 function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function pct(s){ const m=/(\d{1,3})(?:\.\d+)?\s*%/.exec(String(s??'')); return m?parseInt(m[1],10):null; }
@@ -151,7 +151,8 @@ function requests(){
   const d=state.requests, active=(d&&d.active)||[], recent=(d&&d.recent)||[];
   const rows=recent.slice(0,12).map(r=>`<tr><td>${esc(r.backend)}</td><td class="mono">${esc(r.model||'default')}</td><td><span class="res"><span class="dot" style="background:${resDot(r.phase)}"></span>${esc(r.phase)}</span></td>
     <td class="num mono">${mmss(r.elapsed_s)}</td><td class="num mono">${fmtN(r.prompt_chars)}</td><td class="num mono">${fmtN(r.reply_chars)}</td><td class="note ${r.phase==='failed'?'badfg':''}">${esc(r.note||'')}</td></tr>`).join('');
-  return `<div class="th"><div class="n"><span class="name big">Requests</span><span class="sub">${active.length?`${active.length} running · updating every 2s`:'nothing running'}</span></div><button onclick="loadRequests()">Refresh</button></div>
+  const live=state.live?`<span class="live"><span class="d"></span>live</span>`:`<span class="live off"><span class="d"></span>reconnecting…</span>`;
+  return `<div class="th"><div class="n"><span class="name big">Requests</span><span class="sub">${active.length?`${active.length} running`:'nothing running'} · ${live}</span></div><button onclick="loadRequests()">Refresh</button></div>
     ${active.map(runCard).join('')}
     ${recent.length?`<div class="tw"><table><tr><th>backend</th><th>model</th><th>result</th><th class="num">time</th><th class="num">prompt</th><th class="num">reply</th><th>note</th></tr>${rows}</table></div>`:''}`;
 }
@@ -167,17 +168,30 @@ async function refreshAll(){ const b=document.getElementById('all'); b.disabled=
 async function loadRequests(){
   try{ state.requests=await (await fetch('status')).json(); }catch(e){ state.requests=null; }
   render();
-  const active=state.requests&&state.requests.active&&state.requests.active.length;
-  clearTimeout(pollTimer); if(active) pollTimer=setTimeout(loadRequests,2000);
 }
+// The server pushes the status whenever a request changes; nothing is polled.
+function listen(){
+  if(!('EventSource' in window)) return;
+  const es=new EventSource('status/stream');
+  es.onmessage=e=>{ try{ state.requests=JSON.parse(e.data); }catch(x){ return; } state.live=true; render(); };
+  es.onopen=()=>{ state.live=true; render(); };
+  es.onerror=()=>{ state.live=false; render(); }; // the browser reconnects on its own
+}
+// desktop: the Requests block is as tall as the tile row
+const tilesEl=document.getElementById('tiles');
+new ResizeObserver(()=>document.documentElement.style.setProperty('--tiles-h', tilesEl.offsetHeight+'px')).observe(tilesEl);
 async function stop(id){ try{ await fetch('requests/stop?id='+encodeURIComponent(id),{method:'POST'}); }catch(e){} setTimeout(loadRequests,400); }
 setInterval(()=>{ for(const t of document.querySelectorAll('.timer')) t.textContent=mmss((Date.now()-new Date(t.dataset.started).getTime())/1000); },1000);
 
 async function init(){
   document.getElementById('base').textContent=location.origin+'/v1';
-  try{ const h=await (await fetch('health')).json(); state.health=h.backends||{}; }catch(e){}
+  render(); // draw at once; everything below fills in as it arrives
+  // web fonts are added after the first paint so a slow font host never delays the page
+  const f=document.createElement('link'); f.rel='stylesheet'; f.href='https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap'; document.head.appendChild(f);
+  fetch('health').then(r=>r.json()).then(h=>{ state.health=h.backends||{}; render(); }).catch(()=>{}); // slow-ish: never waited on
   try{ const c=await (await fetch('usage/cached')).json(); for(const n of BACKENDS) if(c[n]) state[n]=c[n]; }catch(e){}
   await loadRequests();
+  listen();
 }
 init();
 </script>

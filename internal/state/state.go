@@ -38,9 +38,37 @@ type Registry struct {
     active  map[string]*Request
     recent  []*Request
     cancels map[string]func()
+    subs    map[chan struct{}]struct{}
 }
 
-func New() *Registry { return &Registry{active: map[string]*Request{}, cancels: map[string]func(){}} }
+func New() *Registry {
+    return &Registry{active: map[string]*Request{}, cancels: map[string]func(){}, subs: map[chan struct{}]struct{}{}}
+}
+
+// Subscribe returns a channel that gets a tick whenever any request changes,
+// and a function that ends the subscription. Ticks coalesce: a slow reader
+// sees one tick for a burst of changes.
+func (r *Registry) Subscribe() (<-chan struct{}, func()) {
+    ch := make(chan struct{}, 1)
+    r.mu.Lock()
+    r.subs[ch] = struct{}{}
+    r.mu.Unlock()
+    return ch, func() {
+        r.mu.Lock()
+        delete(r.subs, ch)
+        r.mu.Unlock()
+    }
+}
+
+// notify wakes every subscriber without blocking; the caller holds r.mu.
+func (r *Registry) notify() {
+    for ch := range r.subs {
+        select {
+        case ch <- struct{}{}:
+        default:
+        }
+    }
+}
 
 // SetCancel stores the function that stops request id.
 func (r *Registry) SetCancel(id string, fn func()) {
@@ -63,6 +91,7 @@ func (r *Registry) Cancel(id string) bool {
 func (r *Registry) Start(id, backend, model string, promptChars int, stream bool) {
     r.mu.Lock()
     defer r.mu.Unlock()
+    defer r.notify() // runs before the unlock above
     now := time.Now()
     r.active[id] = &Request{ID: id, Backend: backend, Model: model, Stream: stream, Phase: Queued, Started: now, Updated: now, PromptChars: promptChars}
 }
@@ -70,6 +99,7 @@ func (r *Registry) Start(id, backend, model string, promptChars int, stream bool
 func (r *Registry) Update(id string, phase Phase, replyChars int, note string) {
     r.mu.Lock()
     defer r.mu.Unlock()
+    defer r.notify() // runs before the unlock above
     if q, ok := r.active[id]; ok {
         q.Phase, q.Updated = phase, time.Now()
         if replyChars > 0 {
@@ -84,6 +114,7 @@ func (r *Registry) Update(id string, phase Phase, replyChars int, note string) {
 func (r *Registry) Finish(id string, phase Phase, replyChars int, note string) {
     r.mu.Lock()
     defer r.mu.Unlock()
+    defer r.notify() // runs before the unlock above
     q, ok := r.active[id]
     if !ok {
         return
