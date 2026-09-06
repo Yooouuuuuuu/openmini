@@ -183,12 +183,22 @@ func (w *Web) readUsagePanel() (string, error) {
     if err := panel.WaitFor(pw.LocatorWaitForOptions{State: pw.WaitForSelectorStateVisible, Timeout: pw.Float(10000)}); err != nil {
         return "", fmt.Errorf("usage panel did not open: %v", err)
     }
-    time.Sleep(500 * time.Millisecond) // let the numbers load
-    txt, err := panel.InnerText(pw.LocatorInnerTextOptions{Timeout: pw.Float(5000)})
-    if err != nil {
-        return "", err
+    // the numbers load after the panel opens; wait until a percentage shows
+    var txt string
+    for i := 0; i < 40; i++ {
+        t, err := panel.InnerText(pw.LocatorInnerTextOptions{Timeout: pw.Float(5000)})
+        if err == nil {
+            txt = strings.Join(strings.Fields(t), " ")
+            if strings.Contains(txt, "%") {
+                break
+            }
+        }
+        time.Sleep(250 * time.Millisecond)
     }
-    return strings.Join(strings.Fields(txt), " "), nil
+    if txt == "" {
+        return "", fmt.Errorf("usage panel stayed empty")
+    }
+    return txt, nil
 }
 
 var (
