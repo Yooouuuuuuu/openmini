@@ -144,7 +144,7 @@ function tile(name){
     foot=`<span></span><span class="mono">updated ${clockOf(e.at)}</span>`;
   }
   const busy=e&&e.loading;
-  const sub=SUB[name]+(name==='web'&&e&&e.data&&e.data.current_model?` · ${esc(e.data.current_model)}`:'');
+  const sub=SUB[name];
   return `<div class="tile"><div class="th"><div class="n"><span class="dot ${dot}"></span><span class="name big">${name}</span><span class="sub">${sub}</span></div>
     <button onclick="refresh('${name}')" ${busy?'disabled':''}>${busy?'Refreshing…':'Refresh'}</button></div>${body}${foot?`<div class="foot">${foot}</div>`:''}</div>`;
 }
