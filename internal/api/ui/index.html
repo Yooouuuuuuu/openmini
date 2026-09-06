@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>openmini</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <style>
   :root { color-scheme: dark;
     --bg:#0e1116; --card:#141922; --card2:#131a28; --fg:#e7eaee; --muted:#8a93a0; --dim:#5f6873; --line:#222a35; --hair:#1f242c;
@@ -18,18 +17,19 @@
   body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 "IBM Plex Sans",-apple-system,"Segoe UI",Roboto,"Noto Sans TC",system-ui,sans-serif; }
   .mono { font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums }
   .big { font-family:"Inter Tight","IBM Plex Sans",system-ui,sans-serif; letter-spacing:-.02em }
-  header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px 24px; border-bottom:1px solid var(--hair) }
-  header .l { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap } header h1 { margin:0; font-size:18px; font-weight:600 }
-  header .base { font-size:12px; color:var(--muted) } header .r { display:flex; align-items:center; gap:12px } header .hint { font-size:12px; color:var(--muted) }
-  button { cursor:pointer; font:inherit; font-size:12px; height:30px; padding:0 12px; border:1px solid var(--btnline); background:var(--btn); color:var(--fg); border-radius:8px }
+  header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 12px 14px 24px; border-bottom:1px solid var(--hair) }
+  header .l { display:flex; align-items:baseline; gap:14px; min-width:0 } header h1 { margin:0; font-size:18px; font-weight:600 }
+  header .base { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  header .r { display:flex; align-items:center; gap:14px; margin-left:auto } header .hint { font-size:12px; color:var(--muted) }
+  .live { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted) } .live .d { width:6px; height:6px; border-radius:50%; background:var(--ok) } .live.off .d { background:var(--warn) }
+  button { cursor:pointer; white-space:nowrap; font:inherit; font-size:12px; height:30px; padding:0 12px; border:1px solid var(--btnline); background:var(--btn); color:var(--fg); border-radius:8px }
   button:hover:not([disabled]) { border-color:var(--accent) } button[disabled] { opacity:.5; cursor:default }
-  button.stop { color:var(--badfg); background:var(--stopbg); border-color:var(--stopline); font-weight:500 }
+  button.stop { color:var(--badfg); background:var(--stopbg); border-color:var(--stopline); font-weight:500; height:26px; padding:0 10px }
   button.all { height:34px; padding:0 14px; font-size:13px; font-weight:500 }
   main { padding:18px 24px 28px; display:flex; flex-direction:column; gap:16px }
-  .panel { margin-top:10px } @media (min-width:861px){ .panel { min-height:var(--tiles-h, 0px) } }
-  .live { display:inline-flex; align-items:center; gap:6px } .live .d { width:6px; height:6px; border-radius:50%; background:var(--ok) } .live.off .d { background:var(--warn) }
-  .tiles { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px } @media (max-width:860px){ .tiles { grid-template-columns:1fr } }
-  .tile, .panel { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:14px }
+  .row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px } @media (max-width:860px){ .row { grid-template-columns:1fr } }
+  .row.reqs { margin-top:10px }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:14px }
   .th { display:flex; align-items:center; justify-content:space-between; gap:8px } .th .n { display:flex; align-items:center; gap:10px; min-width:0 }
   .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); flex:none } .dot.ok { background:var(--ok) } .dot.bad { background:var(--bad) }
   .name { font-size:16px; font-weight:600 } .sub { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
@@ -40,27 +40,29 @@
   .hr { height:1px; background:var(--line); margin:6px 0 } .kv { display:flex; justify-content:space-between; gap:8px; font-size:12px; margin-top:4px } .kv .k { color:var(--muted) }
   .bar { height:5px; border-radius:3px; background:var(--track); overflow:hidden } .bar i { display:block; height:100%; background:var(--accent) }
   .bar.warn i { background:var(--warn) } .bar.bad i { background:var(--bad) } .warnfg { color:var(--warnfg) } .badfg { color:var(--badfg) }
-  .foot { display:flex; justify-content:space-between; gap:8px; font-size:12px; color:var(--muted); border-top:1px solid var(--hair); padding-top:10px; flex-wrap:wrap }
+  .foot { display:flex; justify-content:space-between; gap:8px; font-size:12px; color:var(--muted); border-top:1px solid var(--hair); padding-top:10px; flex-wrap:wrap; margin-top:auto }
   .models { font-size:11px; color:var(--dim); line-height:1.5; margin-top:2px } .msg { color:var(--muted) } .msg.bad { color:var(--badfg) }
-  .run { border:1px solid var(--runline); background:var(--card2); border-radius:10px; padding:14px 16px; display:flex; flex-direction:column; gap:10px }
-  .run .top { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap } .run .id { display:flex; align-items:center; gap:12px; flex-wrap:wrap }
-  .pill { font-size:12px; padding:2px 8px; border-radius:6px; background:var(--pill); color:var(--accentfg) } .timer { font-size:18px; font-weight:600 }
-  .steps { display:flex; align-items:center; flex-wrap:wrap; gap:6px 0 } .step { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--dim); white-space:nowrap }
-  .step .d { width:8px; height:8px; border-radius:50%; background:var(--btnline) } .step.done { color:var(--muted) } .step.done .d { background:var(--ok) }
-  .step.now { color:var(--fg); font-weight:500 } .step.now .d { background:var(--accentfg); box-shadow:0 0 0 4px var(--halo) } .steps .ln { flex:1; min-width:10px; height:1px; background:var(--btnline); margin:0 10px }
-  table { width:100%; border-collapse:collapse; font-size:13px } th,td { text-align:left; padding:7px 8px; border-top:1px solid var(--hair); vertical-align:top } th { color:var(--muted); font-weight:400; font-size:12px; border-top:0; padding-top:0 }
-  .num { text-align:right } .res { display:inline-flex; align-items:center; gap:6px; white-space:nowrap } .note { color:var(--muted); word-break:break-word }
-  .tw { overflow-x:auto }
+  /* requests */
+  .rq { gap:0 } .rq .th { margin-bottom:6px }
+  .run { border:1px solid var(--runline); background:var(--card2); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:6px; margin:4px 0 8px }
+  .run .top { display:flex; align-items:center; gap:10px } .run .top .timer { margin-left:auto; font-size:16px; font-weight:600 }
+  .steps { display:flex; align-items:center; gap:4px; font-size:12px } .sd { width:8px; height:8px; border-radius:50%; background:var(--btnline); flex:none }
+  .sd.done { background:var(--ok) } .sd.now { background:var(--accentfg); box-shadow:0 0 0 3px var(--halo) } .steps .sn { margin-left:6px; font-weight:500 }
+  .rrow { display:flex; flex-direction:column; gap:1px; padding:7px 0; border-top:1px solid var(--hair) } .rrow:first-of-type { border-top:0 }
+  .rrow .l1 { display:flex; align-items:center; gap:8px; font-size:13px; min-width:0 } .rrow .l1 .m { overflow:hidden; text-overflow:ellipsis; white-space:nowrap } .rrow .l1 .t { margin-left:auto; color:var(--muted) }
+  .res { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; flex:none } .l2 { font-size:12px; color:var(--muted); word-break:break-word }
+  .more { font-size:12px; color:var(--dim) }
 </style>
 </head>
 <body>
 <header>
   <div class="l"><h1 class="big">openmini</h1><span class="base mono" id="base"></span></div>
-  <div class="r"><span class="hint mono">cached · all usage checks are manual</span><button class="all" onclick="refreshAll()" id="all">Refresh all</button></div>
+  <div class="r"><span class="hint mono">cached · all usage checks are manual</span><span class="live off" id="live"><span class="d"></span>connecting…</span><button class="all" onclick="refreshAll()" id="all">Refresh all</button></div>
 </header>
 <main>
-  <div class="tiles" id="tiles"></div>
-  <section class="panel" id="req"></section>
+  <div class="row" id="tiles"></div>
+  <div class="row reqs" id="req"></div>
+  <div class="more" id="more"></div>
 </main>
 <script>
 const BACKENDS = ['web','agy','agyapi'];
@@ -138,25 +140,30 @@ function facts(wins, extra){
   return `<div class="body">${ring(t.left,'left')}<div class="facts"><div class="t">${esc(t.name)}</div><div class="m mono">${t.left==null?'':(100-t.left)+'% used · '}resets ${esc(t.resets)}${extra?' · '+extra:''}</div>${rest?'<div class="hr"></div>'+rest:''}</div></div>`;
 }
 
+// ---- requests: one block per backend, running first, then its newest 10 ----
 const STEPS=['queued','submitted','thinking','generating','done'];
 function runCard(r){
   const el=(Date.now()-new Date(r.started).getTime())/1000;
   const idx=STEPS.indexOf(r.phase); const cur=idx<0?3:idx;
-  const steps=STEPS.map((s,i)=>`<div class="step ${i<cur?'done':i===cur?'now':''}"><span class="d"></span>${s}${i===cur&&r.note?' · '+esc(r.note):''}</div>`).join('<div class="ln"></div>');
-  return `<div class="run"><div class="top"><div class="id"><span class="pill mono">${esc(r.backend)}</span><span class="mono">${esc(r.model||'default')}</span><span class="sub">prompt ${fmtN(r.prompt_chars)} chars${r.reply_chars?` · reply ${fmtN(r.reply_chars)}`:''}</span></div>
-    <div class="id"><span class="timer big mono" data-started="${esc(r.started)}">${mmss(el)}</span><button class="stop" onclick="stop('${esc(r.id)}')">Stop</button></div></div><div class="steps">${steps}</div></div>`;
+  const dots=STEPS.map((s,i)=>`<span class="sd ${i<cur?'done':i===cur?'now':''}" title="${s}"></span>`).join('');
+  return `<div class="run"><div class="top"><span class="mono">${esc(r.model||'default')}</span><span class="timer big mono" data-started="${esc(r.started)}">${mmss(el)}</span><button class="stop" onclick="stop('${esc(r.id)}')">Stop</button></div>
+    <div class="steps">${dots}<span class="sn">${STEPS[cur]}</span>${r.note?`<span class="l2">· ${esc(r.note)}</span>`:''}</div>
+    <div class="l2">prompt ${fmtN(r.prompt_chars)} chars${r.reply_chars?` · reply ${fmtN(r.reply_chars)} so far`:''}</div></div>`;
 }
 function resDot(p){ return p==='finished'?'var(--ok)':p==='failed'?'var(--bad)':'var(--muted)'; }
-function requests(){
-  const d=state.requests, active=(d&&d.active)||[], recent=(d&&d.recent)||[];
-  const rows=recent.slice(0,12).map(r=>`<tr><td>${esc(r.backend)}</td><td class="mono">${esc(r.model||'default')}</td><td><span class="res"><span class="dot" style="background:${resDot(r.phase)}"></span>${esc(r.phase)}</span></td>
-    <td class="num mono">${mmss(r.elapsed_s)}</td><td class="num mono">${fmtN(r.prompt_chars)}</td><td class="num mono">${fmtN(r.reply_chars)}</td><td class="note ${r.phase==='failed'?'badfg':''}">${esc(r.note||'')}</td></tr>`).join('');
-  const live=state.live?`<span class="live"><span class="d"></span>live</span>`:`<span class="live off"><span class="d"></span>reconnecting…</span>`;
-  return `<div class="th"><div class="n"><span class="name big">Requests</span><span class="sub">${active.length?`${active.length} running`:'nothing running'} · ${live}</span></div><button onclick="loadRequests()">Refresh</button></div>
-    ${active.map(runCard).join('')}
-    ${recent.length?`<div class="tw"><table><tr><th>backend</th><th>model</th><th>result</th><th class="num">time</th><th class="num">prompt</th><th class="num">reply</th><th>note</th></tr>${rows}</table></div>`:''}`;
+function reqBlock(name){
+  const d=state.requests; const active=((d&&d.active)||[]).filter(r=>r.backend===name); const recent=((d&&d.recent)||[]).filter(r=>r.backend===name).slice(0,10);
+  const rows=recent.map(r=>`<div class="rrow"><div class="l1"><span class="mono m">${esc(r.model||'default')}</span><span class="res"><span class="dot" style="background:${resDot(r.phase)}"></span>${esc(r.phase)}</span><span class="t mono">${mmss(r.elapsed_s)}</span></div>
+    <div class="l2">${fmtN(r.prompt_chars)} → ${fmtN(r.reply_chars)} chars${r.note?` · <span class="${r.phase==='failed'?'badfg':''}">${esc(r.note)}</span>`:''}</div></div>`).join('');
+  return `<div class="tile rq"><div class="th"><div class="n"><span class="name big">${name}</span><span class="sub">${active.length?`${active.length} running`:'idle'}</span></div></div>
+    ${active.map(runCard).join('')}${rows||'<div class="msg">no requests yet</div>'}</div>`;
 }
-function render(){ document.getElementById('tiles').innerHTML=BACKENDS.map(tile).join(''); document.getElementById('req').innerHTML=requests(); }
+function render(){
+  document.getElementById('tiles').innerHTML=BACKENDS.map(tile).join('');
+  document.getElementById('req').innerHTML=BACKENDS.map(reqBlock).join('');
+  document.getElementById('more').textContent=`each block keeps its newest 10 requests since the server started · everything else is in the log, logs/${new Date().toISOString().slice(0,10)}.log`;
+  const l=document.getElementById('live'); l.className='live'+(state.live?'':' off'); l.innerHTML=`<span class="d"></span>${state.live?'live':'reconnecting…'}`;
+}
 
 async function refresh(name){
   state[name]=Object.assign({},state[name],{loading:true}); render();
@@ -165,10 +172,7 @@ async function refresh(name){
   render();
 }
 async function refreshAll(){ const b=document.getElementById('all'); b.disabled=true; await Promise.all(BACKENDS.map(refresh)); await loadRequests(); b.disabled=false; }
-async function loadRequests(){
-  try{ state.requests=await (await fetch('status')).json(); }catch(e){ state.requests=null; }
-  render();
-}
+async function loadRequests(){ try{ state.requests=await (await fetch('status')).json(); }catch(e){ state.requests=null; } render(); }
 // The server pushes the status whenever a request changes; nothing is polled.
 function listen(){
   if(!('EventSource' in window)) return;
@@ -177,9 +181,6 @@ function listen(){
   es.onopen=()=>{ state.live=true; render(); };
   es.onerror=()=>{ state.live=false; render(); }; // the browser reconnects on its own
 }
-// desktop: the Requests block is as tall as the tile row
-const tilesEl=document.getElementById('tiles');
-new ResizeObserver(()=>document.documentElement.style.setProperty('--tiles-h', tilesEl.offsetHeight+'px')).observe(tilesEl);
 async function stop(id){ try{ await fetch('requests/stop?id='+encodeURIComponent(id),{method:'POST'}); }catch(e){} setTimeout(loadRequests,400); }
 setInterval(()=>{ for(const t of document.querySelectorAll('.timer')) t.textContent=mmss((Date.now()-new Date(t.dataset.started).getTime())/1000); },1000);
 
@@ -188,7 +189,7 @@ async function init(){
   render(); // draw at once; everything below fills in as it arrives
   // web fonts are added after the first paint so a slow font host never delays the page
   const f=document.createElement('link'); f.rel='stylesheet'; f.href='https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap'; document.head.appendChild(f);
-  fetch('health').then(r=>r.json()).then(h=>{ state.health=h.backends||{}; render(); }).catch(()=>{}); // slow-ish: never waited on
+  fetch('health').then(r=>r.json()).then(h=>{ state.health=h.backends||{}; render(); }).catch(()=>{});
   try{ const c=await (await fetch('usage/cached')).json(); for(const n of BACKENDS) if(c[n]) state[n]=c[n]; }catch(e){}
   await loadRequests();
   listen();
