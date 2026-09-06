@@ -76,6 +76,8 @@ type AgyAPI struct {
     Model     string   `toml:"model"`   // default model id, agy-style suffix allowed
     Models    []string `toml:"models"`  // fallback list when the service lists none
     CreditTypes []string `toml:"credit_types"` // subscription entitlements to use, e.g. ["GOOGLE_ONE_AI"]
+    OfficialPrompt    bool   `toml:"official_prompt"`    // send the Antigravity identity snippet as the first system part
+    SystemInstruction string `toml:"system_instruction"` // optional instruction of your own, sent after it
 }
 
 // Load reads path and fills in defaults for anything left out.
@@ -251,4 +253,9 @@ model = "gemini-3.1-pro-low"
 # Subscription entitlement the requests draw on. GOOGLE_ONE_AI is the Google AI
 # Pro/Ultra plan; set to [] to send none.
 credit_types = ["GOOGLE_ONE_AI"]
+# Send the opening of Antigravity's own system prompt (wrapped as a
+# non-instruction) as the first system part, so requests look like the IDE's.
+official_prompt = true
+# Optional instruction of your own, sent after it as system text.
+system_instruction = ""
 `

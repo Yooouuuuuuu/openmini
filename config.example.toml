@@ -83,3 +83,8 @@ model = "gemini-3.1-pro-low"
 # Subscription entitlement the requests draw on. GOOGLE_ONE_AI is the Google AI
 # Pro/Ultra plan; set to [] to send none.
 credit_types = ["GOOGLE_ONE_AI"]
+# Send the opening of Antigravity's own system prompt (wrapped as a
+# non-instruction) as the first system part, so requests look like the IDE's.
+official_prompt = true
+# Optional instruction of your own, sent after it as system text.
+system_instruction = ""
