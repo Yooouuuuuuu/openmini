@@ -11,6 +11,9 @@ type Call struct {
     Prompt   string // everything, in one string
     Context  string // everything except the final user message (for attach/split modes)
     LastUser string // the final user message when the last message was a user turn
+    // MaxTokens caps the reply when > 0 (used for cheap probes). Backends
+    // that cannot honour it ignore it.
+    MaxTokens int
     // OnText receives the reply text so far (cumulative), as it streams. May be nil.
     OnText func(soFar string)
     // OnPhase reports "submitted" and "generating" with an optional note. May be nil.

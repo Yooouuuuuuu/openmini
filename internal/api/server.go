@@ -556,8 +556,13 @@ func (s *Server) handlePolicyBisect(c *fiber.Ctx) error {
     if err != nil {
         return c.Status(400).JSON(fiber.Map{"error": err.Error()})
     }
+    // Probes must be cheap: one output token, so a fragment that passes the
+    // blocklist returns at once instead of generating a reply.
+    if c.Query("last") != "" && c.Query("model") == "" && b.Name() == "agyapi" {
+        model = s.cfg.AgyAPI.ProbeModel
+    }
     blocked := func(text string) (bool, string) {
-        res, err := b.Complete(backend.Call{ID: "bisect", Model: model, Prompt: text})
+        res, err := b.Complete(backend.Call{ID: "bisect", Model: model, Prompt: text, MaxTokens: 1})
         if err != nil {
             return false, err.Error()
         }

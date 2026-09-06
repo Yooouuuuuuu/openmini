@@ -78,6 +78,7 @@ type AgyAPI struct {
     CreditTypes []string `toml:"credit_types"` // subscription entitlements to use, e.g. ["GOOGLE_ONE_AI"]
     OfficialPrompt    bool   `toml:"official_prompt"`    // send the Antigravity identity snippet as the first system part
     SystemInstruction string `toml:"system_instruction"` // optional instruction of your own, sent after it
+    ProbeModel        string `toml:"probe_model"`        // cheap model used by /tools/policy-bisect
 }
 
 // Load reads path and fills in defaults for anything left out.
@@ -147,6 +148,9 @@ func (c *Config) applyDefaults() {
     }
     if x.Model == "" {
         x.Model = "gemini-3.1-pro-high"
+    }
+    if x.ProbeModel == "" {
+        x.ProbeModel = "gemini-3.5-flash-low"
     }
     if x.CreditTypes == nil {
         x.CreditTypes = []string{"GOOGLE_ONE_AI"}

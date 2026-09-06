@@ -306,6 +306,9 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
     }
     model := id // the service takes agy's slugs verbatim, e.g. gemini-3.1-pro-high
     gen := map[string]any{}
+    if c.MaxTokens > 0 {
+        gen["maxOutputTokens"] = c.MaxTokens
+    }
     // Shape used by the Antigravity clients: userAgent and requestType tell
     // the service which product's quota applies; enabledCreditTypes names
     // the subscription entitlement.
