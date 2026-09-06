@@ -91,6 +91,12 @@ func (s *Server) Listen() error {
             c.Set("Content-Type", "text/plain; charset=utf-8")
             return c.SendString(h)
         })
+        app.Post("/web/reload", func(c *fiber.Ctx) error {
+            if err := s.webDebug.Reload(); err != nil {
+                return c.Status(500).JSON(fiber.Map{"ok": false, "error": err.Error()})
+            }
+            return c.JSON(fiber.Map{"ok": true})
+        })
         app.Get("/debug/web/settings", func(c *fiber.Ctx) error {
             h, err := s.webDebug.SettingsMenuHTML(c.Query("item"))
             if err != nil {

@@ -116,6 +116,9 @@ type Web struct {
     streamMu   sync.Mutex
     lastStream []byte // body of the last StreamGenerate response seen on the page
     streamURL  string
+
+    usageMu   sync.Mutex
+    usagePage pw.Page // separate tab for the usage panel; never touches the chat tab
     currentModel string
     desiredModel string
     menuRead     time.Time
@@ -149,8 +152,8 @@ func (w *Web) Usage() (any, error) {
     if !w.started {
         return nil, fmt.Errorf("browser not started")
     }
-    w.mu.Lock()
-    defer w.mu.Unlock()
+    w.usageMu.Lock()
+    defer w.usageMu.Unlock()
     if time.Since(w.usageRead) < time.Minute && w.usageCache != nil {
         return w.usageCache, nil
     }
@@ -170,22 +173,30 @@ func (w *Web) Usage() (any, error) {
     return out, nil
 }
 
-// readUsagePanel opens Settings > Usage limits and returns the panel's text.
+// readUsagePanel opens Settings > Usage limits in a dedicated tab and returns
+// the panel's text. The chat tab is not involved, so a refresh never waits
+// for a running reply and cannot leave the chat in the usage view.
 func (w *Web) readUsagePanel() (string, error) {
-    btn := w.page.Locator("[data-test-id='settings-and-help-button'], button[aria-label*='設定'], button[aria-label*='Settings']").First()
-    if err := btn.Click(pw.LocatorClickOptions{Timeout: pw.Float(10000)}); err != nil {
+    if w.usagePage == nil {
+        p, err := w.ctx.NewPage()
+        if err != nil {
+            return "", fmt.Errorf("usage tab: %v", err)
+        }
+        w.usagePage = p
+    }
+    pg := w.usagePage
+    if _, err := pg.Goto(geminiURL, pw.PageGotoOptions{WaitUntil: pw.WaitUntilStateDomcontentloaded}); err != nil {
+        return "", fmt.Errorf("usage tab: %v", err)
+    }
+    btn := pg.Locator("[data-test-id='settings-and-help-button'], button[aria-label*='設定'], button[aria-label*='Settings']").First()
+    if err := btn.Click(pw.LocatorClickOptions{Timeout: pw.Float(15000)}); err != nil {
         return "", fmt.Errorf("settings button: %v", err)
     }
-    defer func() {
-        w.page.Keyboard().Press("Escape")
-        time.Sleep(300 * time.Millisecond)
-        w.page.Keyboard().Press("Escape")
-    }()
-    item := w.page.Locator("[data-test-id='desktop-usage-metrics-button']").First()
+    item := pg.Locator("[data-test-id='desktop-usage-metrics-button']").First()
     if err := item.Click(pw.LocatorClickOptions{Timeout: pw.Float(5000)}); err != nil {
         return "", fmt.Errorf("usage menu entry: %v", err)
     }
-    panel := w.page.Locator("usage-metrics-window").First()
+    panel := pg.Locator("usage-metrics-window").First()
     if err := panel.WaitFor(pw.LocatorWaitForOptions{State: pw.WaitForSelectorStateVisible, Timeout: pw.Float(10000)}); err != nil {
         return "", fmt.Errorf("usage panel did not open: %v", err)
     }
@@ -319,6 +330,45 @@ func (w *Web) Start() error {
     if _, err := w.ensureModel(w.cfg.Model); err != nil {
         w.logf("web: warning: %v", err)
     }
+    return nil
+}
+
+// chatTabHealthy reports whether the chat tab is in a state that can take a
+// prompt: the box is present and no usage view or dialog is open.
+func (w *Web) chatTabHealthy() bool {
+    if !w.exists(w.page.Locator(promptBoxSel)) {
+        return false
+    }
+    if w.exists(w.page.Locator("usage-metrics-window, mat-dialog-container")) {
+        return false
+    }
+    if t, err := w.page.Title(); err == nil && (t == "用量" || strings.Contains(strings.ToLower(t), "usage")) {
+        return false
+    }
+    return true
+}
+
+// Reload forces the chat tab back to a fresh app page. Used after a request
+// ends in a stuck state and on demand.
+func (w *Web) Reload() error {
+    w.mu.Lock()
+    defer w.mu.Unlock()
+    return w.reload()
+}
+
+func (w *Web) reload() error {
+    if _, err := w.page.Goto("about:blank"); err != nil {
+        return err
+    }
+    if _, err := w.page.Goto(geminiURL, pw.PageGotoOptions{WaitUntil: pw.WaitUntilStateDomcontentloaded}); err != nil {
+        return fmt.Errorf("reload: %v", err)
+    }
+    box := w.page.Locator(promptBoxSel)
+    if err := box.WaitFor(pw.LocatorWaitForOptions{State: pw.WaitForSelectorStateVisible, Timeout: pw.Float(float64(pageWait / time.Millisecond))}); err != nil {
+        return fmt.Errorf("reload: prompt box did not appear: %v", err)
+    }
+    w.currentModel = "" // the picker may have been reset; re-read on the next request
+    w.logf("web: page reloaded")
     return nil
 }
 
@@ -516,6 +566,12 @@ func (w *Web) newChat(c backend.Call) error {
     if _, err := w.page.Goto(geminiURL, pw.PageGotoOptions{WaitUntil: pw.WaitUntilStateDomcontentloaded}); err != nil {
         return fmt.Errorf("open new chat: %v", err)
     }
+    if !w.chatTabHealthy() {
+        w.logf("web: chat tab looked wrong (usage view or dialog); reloading")
+        if err := w.reload(); err != nil {
+            return err
+        }
+    }
     box := w.page.Locator(promptBoxSel)
     if err := box.WaitFor(pw.LocatorWaitForOptions{State: pw.WaitForSelectorStateVisible, Timeout: w.waitMillis()}); err != nil {
         if !w.exists(w.page.Locator(signedInSel)) {
@@ -608,6 +664,15 @@ func (w *Web) Complete(c backend.Call) (backend.Result, error) {
         text, err := w.ask(c)
         if err == nil && (i >= attempts || !isGeminiError(text)) {
             return backend.Result{Text: text, Status: "SUCCESS"}, nil
+        }
+        if err != nil {
+            // a stuck outcome usually means the tab is wedged; reload so the
+            // next request starts from a clean page
+            if e := err.Error(); err == errDeadReply || strings.Contains(e, "no reply started") || strings.Contains(e, "disappeared") {
+                if rerr := w.reload(); rerr != nil {
+                    w.logf("web: reload after failure: %v", rerr)
+                }
+            }
         }
         if err != nil && err != errDeadReply {
             return backend.Result{Text: text}, err
