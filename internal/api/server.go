@@ -71,6 +71,14 @@ func (s *Server) Listen() error {
             c.Set("Content-Type", "text/plain; charset=utf-8")
             return c.SendString(h)
         })
+        app.Get("/debug/web/settings", func(c *fiber.Ctx) error {
+            h, err := s.webDebug.SettingsMenuHTML(c.Query("item"))
+            if err != nil {
+                return c.Status(500).SendString(err.Error())
+            }
+            c.Set("Content-Type", "text/plain; charset=utf-8")
+            return c.SendString(h)
+        })
         app.Get("/debug/web/copy", func(c *fiber.Ctx) error {
             t, err := s.webDebug.CopyLastReply()
             if err != nil {

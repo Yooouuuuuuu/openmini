@@ -108,6 +108,8 @@ type Web struct {
     modelOptions []string
     unavailable  []string // picker entries currently disabled (usage limit reached)
     entryNotes   map[string]string // description text shown under a picker entry (e.g. reset hint)
+    usageCache   map[string]any
+    usageRead    time.Time
     currentModel string
     desiredModel string
     menuRead     time.Time
@@ -134,19 +136,97 @@ func (w *Web) Ready() error {
     return nil
 }
 
-// Usage reports what the picker shows: the model in use and the entries the
-// app has disabled, which is how the Gemini app signals a usage limit.
+// Usage reads the app's own usage panel (Settings > Usage limits): current
+// window and weekly allowance with their reset times, plus the picker state.
+// The panel is opened at most once a minute; the result is cached in between.
 func (w *Web) Usage() (any, error) {
     if !w.started {
         return nil, fmt.Errorf("browser not started")
     }
-    return map[string]any{
+    w.mu.Lock()
+    defer w.mu.Unlock()
+    if time.Since(w.usageRead) < time.Minute && w.usageCache != nil {
+        return w.usageCache, nil
+    }
+    out := map[string]any{
         "current_model": w.currentPickerLabel(),
         "unavailable":   w.unavailable,
-        "entry_notes":   w.entryNotes,
-        "menu_read_at":  w.menuRead.Format(time.RFC3339),
-        "note":          "the Gemini app shows no counter; disabled picker entries mean their usage limit is reached",
-    }, nil
+        "note":          "from the app's Settings > Usage limits panel",
+    }
+    if txt, err := w.readUsagePanel(); err != nil {
+        out["panel_error"] = err.Error()
+    } else {
+        for k, v := range parseUsagePanel(txt) {
+            out[k] = v
+        }
+    }
+    w.usageCache, w.usageRead = out, time.Now()
+    return out, nil
+}
+
+// readUsagePanel opens Settings > Usage limits and returns the panel's text.
+func (w *Web) readUsagePanel() (string, error) {
+    btn := w.page.Locator("[data-test-id='settings-and-help-button'], button[aria-label*='設定'], button[aria-label*='Settings']").First()
+    if err := btn.Click(pw.LocatorClickOptions{Timeout: pw.Float(10000)}); err != nil {
+        return "", fmt.Errorf("settings button: %v", err)
+    }
+    defer func() {
+        w.page.Keyboard().Press("Escape")
+        time.Sleep(300 * time.Millisecond)
+        w.page.Keyboard().Press("Escape")
+    }()
+    item := w.page.Locator("[data-test-id='desktop-usage-metrics-button']").First()
+    if err := item.Click(pw.LocatorClickOptions{Timeout: pw.Float(5000)}); err != nil {
+        return "", fmt.Errorf("usage menu entry: %v", err)
+    }
+    panel := w.page.Locator("usage-metrics-window").First()
+    if err := panel.WaitFor(pw.LocatorWaitForOptions{State: pw.WaitForSelectorStateVisible, Timeout: pw.Float(10000)}); err != nil {
+        return "", fmt.Errorf("usage panel did not open: %v", err)
+    }
+    time.Sleep(500 * time.Millisecond) // let the numbers load
+    txt, err := panel.InnerText(pw.LocatorInnerTextOptions{Timeout: pw.Float(5000)})
+    if err != nil {
+        return "", err
+    }
+    return strings.Join(strings.Fields(txt), " "), nil
+}
+
+var (
+    pctRe   = regexp.MustCompile(`(\d{1,3})\s*%`)
+    resetRe = regexp.MustCompile(`(?:重設時間|重设时间|Resets?)[：:\s]*(.+?)(?:\s+(?:每週|每周|Weekly|已使用|Used)|$)`)
+)
+
+// parseUsagePanel pulls the two windows out of the panel text. The text is in
+// the account's language; percentages and the "reset" label are matched
+// loosely and the raw text is kept for anything the patterns miss.
+func parseUsagePanel(txt string) map[string]any {
+    out := map[string]any{"panel_text": txt}
+    split := -1
+    for _, k := range []string{"每週", "每周", "Weekly", "weekly"} {
+        if i := strings.Index(txt, k); i >= 0 {
+            split = i
+            break
+        }
+    }
+    cur, week := txt, ""
+    if split > 0 {
+        cur, week = txt[:split], txt[split:]
+    }
+    if m := pctRe.FindStringSubmatch(cur); m != nil {
+        out["current_used"] = m[1] + "%"
+    }
+    if m := resetRe.FindStringSubmatch(cur); m != nil {
+        out["current_resets"] = strings.TrimSpace(m[1])
+    }
+    if week != "" {
+        if m := pctRe.FindStringSubmatch(week); m != nil {
+            out["weekly_used"] = m[1] + "%"
+        }
+        if m := resetRe.FindStringSubmatch(week); m != nil {
+            out["weekly_resets"] = strings.TrimSpace(m[1])
+        }
+    }
+    return out
 }
 
 // currentPickerLabel reads the model named in the picker button's label,
@@ -228,6 +308,30 @@ func (w *Web) CopyLastReply() (string, error) {
     w.mu.Lock()
     defer w.mu.Unlock()
     return w.copyReply()
+}
+
+// SettingsMenuHTML opens the bottom-left settings menu and returns the page
+// markup, then closes the menu (diagnostics for locating the usage panel).
+func (w *Web) SettingsMenuHTML(item string) (string, error) {
+    w.mu.Lock()
+    defer w.mu.Unlock()
+    btn := w.page.Locator("[data-test-id='settings-and-help-button'], button[aria-label*='設定'], button[aria-label*='Settings']").First()
+    if err := btn.Click(pw.LocatorClickOptions{Timeout: pw.Float(10000)}); err != nil {
+        return "", fmt.Errorf("settings button: %v", err)
+    }
+    time.Sleep(1200 * time.Millisecond)
+    if item != "" {
+        it := w.page.Locator("[role='menuitem'], button, a", pw.PageLocatorOptions{HasText: item}).First()
+        if err := it.Click(pw.LocatorClickOptions{Timeout: pw.Float(5000)}); err != nil {
+            return "", fmt.Errorf("menu item %q: %v", item, err)
+        }
+        time.Sleep(2500 * time.Millisecond)
+    }
+    html, err := w.page.Content()
+    w.page.Keyboard().Press("Escape")
+    time.Sleep(300 * time.Millisecond)
+    w.page.Keyboard().Press("Escape")
+    return html, err
 }
 
 // Screenshot returns a PNG of the current page.
