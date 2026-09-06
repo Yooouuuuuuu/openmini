@@ -68,6 +68,14 @@ func (s *Server) Listen() error {
             c.Set("Content-Type", "text/plain; charset=utf-8")
             return c.SendString(h)
         })
+        app.Get("/debug/web/copy", func(c *fiber.Ctx) error {
+            t, err := s.webDebug.CopyLastReply()
+            if err != nil {
+                return c.Status(500).SendString(err.Error())
+            }
+            c.Set("Content-Type", "text/plain; charset=utf-8")
+            return c.SendString(t)
+        })
         app.Get("/debug/web/screenshot", func(c *fiber.Ctx) error {
             img, err := s.webDebug.Screenshot()
             if err != nil {

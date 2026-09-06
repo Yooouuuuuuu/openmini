@@ -220,6 +220,14 @@ func (w *Web) Stop() {
 // HTML returns the current page markup (for fixing selectors).
 func (w *Web) HTML() (string, error) { return w.page.Content() }
 
+// CopyLastReply presses the copy button under the newest reply and returns
+// the clipboard text (diagnostics).
+func (w *Web) CopyLastReply() (string, error) {
+    w.mu.Lock()
+    defer w.mu.Unlock()
+    return w.copyReply()
+}
+
 // Screenshot returns a PNG of the current page.
 func (w *Web) Screenshot() ([]byte, error) {
     return w.page.Screenshot(pw.PageScreenshotOptions{FullPage: pw.Bool(true)})
