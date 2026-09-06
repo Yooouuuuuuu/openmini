@@ -57,6 +57,7 @@ func (s *Server) Listen() error {
     app.Get("/status", s.handleStatus)
     app.Get("/v1/models", s.handleModels)
     app.Post("/v1/chat/completions", s.handleChat)
+    app.Post("/tools/policy-bisect", s.handlePolicyBisect)
     app.Get("/usage", s.handleUsage)
     app.Get("/v1/usage", s.handleUsage)
     if s.webDebug != nil {
@@ -514,6 +515,92 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
         write("data: [DONE]\n\n")
     })
     return nil
+}
+
+// handlePolicyBisect finds which fragments of a prompt trip the service's
+// pre-submission blocklist. It takes a normal chat body, sends the full prompt
+// to the chosen backend, and if that comes back as the policy notice, splits
+// the text and re-tests pieces until the blocked fragments are small.
+// Probes return in well under a second and consume no quota.
+func (s *Server) handlePolicyBisect(c *fiber.Ctx) error {
+    var req chatRequest
+    if err := c.BodyParser(&req); err != nil {
+        return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+    }
+    full, _, _, err := s.buildPrompt(req.Messages)
+    if err != nil {
+        return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+    }
+    b, model, err := s.resolve(req.Model)
+    if err != nil {
+        return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+    }
+    blocked := func(text string) (bool, string) {
+        res, err := b.Complete(backend.Call{ID: "bisect", Model: model, Prompt: text})
+        if err != nil {
+            return false, err.Error()
+        }
+        t := strings.TrimSpace(res.Text)
+        hit := strings.Contains(t, "Prohibited Use") || strings.Contains(t, "could not be submitted") || strings.Contains(t, "sensitive words")
+        return hit, t
+    }
+    isBlocked, first := blocked(full)
+    if !isBlocked {
+        return c.JSON(fiber.Map{"blocked": false, "reply_start": first[:min(len(first), 120)], "probes": 1})
+    }
+    // Recursive split on paragraph and line boundaries; keep pieces that are
+    // still blocked; stop when a piece is small enough to read.
+    const minChars = 160
+    probes := 1
+    var found []string
+    var dig func(text string, depth int)
+    dig = func(text string, depth int) {
+        if backend.Chars(text) <= minChars || depth > 12 {
+            found = append(found, text)
+            return
+        }
+        parts := splitHalf(text)
+        anyBlocked := false
+        for _, part := range parts {
+            if strings.TrimSpace(part) == "" {
+                continue
+            }
+            probes++
+            if hit, _ := blocked(part); hit {
+                anyBlocked = true
+                dig(part, depth+1)
+            }
+        }
+        if !anyBlocked {
+            // the halves pass alone; the trigger spans the cut, keep the whole piece
+            found = append(found, text)
+        }
+    }
+    dig(full, 0)
+    return c.JSON(fiber.Map{"blocked": true, "probes": probes, "fragments": found, "notice": first})
+}
+
+// splitHalf cuts text near its middle, preferring a blank line, then a line break.
+func splitHalf(text string) []string {
+    mid := len(text) / 2
+    cut := -1
+    for _, sep := range []string{"\n\n", "\n", "。", ". ", " "} {
+        if i := strings.LastIndex(text[:mid], sep); i > len(text)/6 {
+            cut = i + len(sep)
+            break
+        }
+        if i := strings.Index(text[mid:], sep); i >= 0 && mid+i < len(text)*5/6 {
+            cut = mid + i + len(sep)
+            break
+        }
+    }
+    if cut <= 0 || cut >= len(text) {
+        cut = mid
+        for cut < len(text) && !utf8.RuneStart(text[cut]) {
+            cut++
+        }
+    }
+    return []string{text[:cut], text[cut:]}
 }
 
 func remainder(sent, final string) string {
