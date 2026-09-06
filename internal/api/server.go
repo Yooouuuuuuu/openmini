@@ -25,6 +25,8 @@ import (
 )
 
 type Server struct {
+    recentMu sync.Mutex
+    recent   []chatRequest // last few request bodies, memory only, for /tools/policy-bisect?last=1
     cfg      *config.Config
     log      *logging.Logger
     st       *state.Registry
@@ -363,6 +365,12 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
     if err != nil {
         return c.Status(400).JSON(fiber.Map{"error": fiber.Map{"message": err.Error(), "type": "invalid_request_error"}})
     }
+    s.recentMu.Lock()
+    s.recent = append([]chatRequest{req}, s.recent...)
+    if len(s.recent) > 5 {
+        s.recent = s.recent[:5]
+    }
+    s.recentMu.Unlock()
     b, model, err := s.resolve(req.Model)
     if err != nil {
         return c.Status(400).JSON(fiber.Map{"error": fiber.Map{"message": err.Error(), "type": "invalid_request_error"}})
@@ -524,7 +532,20 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 // Probes return in well under a second and consume no quota.
 func (s *Server) handlePolicyBisect(c *fiber.Ctx) error {
     var req chatRequest
-    if err := c.BodyParser(&req); err != nil {
+    if c.Query("last") != "" {
+        // bisect the most recent chat request the server received (kept in memory only)
+        s.recentMu.Lock()
+        if len(s.recent) > 0 {
+            req = s.recent[0]
+        }
+        s.recentMu.Unlock()
+        if len(req.Messages) == 0 {
+            return c.Status(400).JSON(fiber.Map{"error": "no request seen since start; send the request once, then call this with ?last=1"})
+        }
+        if m := c.Query("model"); m != "" {
+            req.Model = m
+        }
+    } else if err := c.BodyParser(&req); err != nil {
         return c.Status(400).JSON(fiber.Map{"error": err.Error()})
     }
     full, _, _, err := s.buildPrompt(req.Messages)
