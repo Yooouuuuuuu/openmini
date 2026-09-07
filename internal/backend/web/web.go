@@ -913,9 +913,14 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
 		} else {
 			gone = time.Time{}
 		}
-		// A reply that never shows any text is dead, whatever its busy state.
+		// A reply that never shows any text is dead, unless the page still
+		// shows the model working (stop icon or thinking panel): 3.1 Pro can
+		// think for many minutes on a long prompt with nothing rendered yet.
 		if last == "" && time.Since(opened) > noText {
-			return "", errDeadReply
+			working := w.exists(w.page.Locator(busyIconSel)) || w.exists(w.page.Locator("thinking-dots-animation, thinking-overlay"))
+			if !working || time.Since(opened) > 45*time.Minute {
+				return "", errDeadReply
+			}
 		}
 		if w.exists(reply) {
 			if raw, err := reply.Evaluate(cleanReplyJS, nil, pw.LocatorEvaluateOptions{Timeout: short}); err == nil {
@@ -980,7 +985,8 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
 					return t, nil
 				}
 			}
-			if busy == "true" && !generating && last == "" && time.Since(start) > deadReplyAfter {
+			if busy == "true" && !generating && last == "" && time.Since(start) > deadReplyAfter &&
+				!w.exists(w.page.Locator("thinking-dots-animation, thinking-overlay")) {
 				return "", errDeadReply
 			}
 		}
