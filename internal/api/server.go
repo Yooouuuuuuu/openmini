@@ -47,6 +47,7 @@ type Server struct {
 	backends   map[string]backend.Backend
 	webDebug   *web.Web
 	started    time.Time
+	OnStop     func() // asked to shut down by POST /shutdown from this machine
 }
 
 func New(cfg *config.Config, log *logging.Logger, backends map[string]backend.Backend, webDebug *web.Web) *Server {
@@ -81,6 +82,7 @@ func (s *Server) Listen() error {
 	app.Get("/status", s.handleStatus)
 	app.Get("/status/stream", s.handleStatusStream)
 	app.Post("/requests/stop", s.handleStop)
+	app.Post("/shutdown", s.handleShutdown)
 	app.Get("/v1/models", s.handleModels)
 	app.Post("/v1/chat/completions", s.handleChat)
 	app.Post("/tools/policy-bisect", s.handlePolicyBisect)
@@ -314,6 +316,24 @@ func (s *Server) handleModels(c *fiber.Ctx) error {
 		data = []fiber.Map{}
 	}
 	return c.JSON(fiber.Map{"object": "list", "data": data})
+}
+
+// handleShutdown stops the server, but only when asked from this machine
+// (openmini stop, or the console), never from the network.
+func (s *Server) handleShutdown(c *fiber.Ctx) error {
+	ip := c.IP()
+	if ip != "127.0.0.1" && ip != "::1" && ip != "localhost" {
+		return c.Status(403).JSON(fiber.Map{"error": "shutdown is only accepted from this machine"})
+	}
+	if s.OnStop == nil {
+		return c.Status(500).JSON(fiber.Map{"error": "no stop handler"})
+	}
+	s.log.Printf("shutdown requested locally")
+	go func() {
+		time.Sleep(300 * time.Millisecond) // let the reply go out
+		s.OnStop()
+	}()
+	return c.JSON(fiber.Map{"ok": true, "message": "stopping"})
 }
 
 // handleStop cancels an active request by id (?id= or JSON {"id":...}).

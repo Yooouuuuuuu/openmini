@@ -34,7 +34,7 @@ func main() {
 		a.Version = version
 		a.Desc = "OpenAI-compatible endpoint over the Gemini web app and the Antigravity CLI"
 	})
-	app.Add(serveCmd(), setupCmd(), loginCmd(), statusCmd(), doctorCmd(), initCmd())
+	app.Add(serveCmd(), stopCmd(), setupCmd(), loginCmd(), statusCmd(), doctorCmd(), initCmd())
 	plain := len(os.Args) == 1 // double-click on Windows, or plain "openmini"
 	if plain {
 		if _, err := os.Stat("config.toml"); err != nil {
@@ -112,7 +112,9 @@ func serveCmd() *gcli.Command {
 				os.Exit(0)
 			}()
 			logger.Printf("listening on :%d (base URL http://localhost:%d/v1), default backend %s", cfg.Server.Port, cfg.Server.Port, cfg.Server.DefaultBackend)
-			return api.New(cfg, logger, backends, webDebug).Listen()
+			srv := api.New(cfg, logger, backends, webDebug)
+			srv.OnStop = func() { sigs <- syscall.SIGTERM } // "openmini stop" takes the same path as Ctrl+C
+			return srv.Listen()
 		},
 	}
 }
@@ -163,6 +165,35 @@ func initCmd() *gcli.Command {
 				return err
 			}
 			fmt.Printf("wrote %s; edit it, then run %s\n", cfgPath, startHint())
+			return nil
+		},
+	}
+}
+
+// stopCmd asks the running server on this machine to shut down.
+func stopCmd() *gcli.Command {
+	return &gcli.Command{
+		Name: "stop", Desc: "stop the running openmini on this machine",
+		Config: withConfigOpt,
+		Func: func(c *gcli.Command, _ []string) error {
+			cfg, err := config.Load(cfgPath)
+			if err != nil {
+				return err
+			}
+			req, _ := http.NewRequest("POST", fmt.Sprintf("http://localhost:%d/shutdown", cfg.Server.Port), nil)
+			if len(cfg.Server.APIKeys) > 0 {
+				req.Header.Set("Authorization", "Bearer "+cfg.Server.APIKeys[0])
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				fmt.Println("openmini is not running")
+				return nil
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("server answered %s", resp.Status)
+			}
+			fmt.Println("stopping openmini")
 			return nil
 		},
 	}
