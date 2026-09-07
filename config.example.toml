@@ -76,6 +76,9 @@ oversize_action = "web"
 # token is refreshed by running agy when it nears expiry.
 enabled = true
 token_file = "~/.gemini/antigravity-cli/antigravity-oauth-token"
+# On Windows agy keeps the session in the Credential Manager instead of a file;
+# this is the entry name it uses.
+credential = "gemini:antigravity"
 agy_binary = "~/.local/bin/agy"
 user_agent = "antigravity/1.13.0 linux/amd64"
 ide_type = "ANTIGRAVITY"

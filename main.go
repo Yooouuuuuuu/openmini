@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -172,8 +173,10 @@ func doctorCmd() *gcli.Command {
 				return fmt.Errorf("doctor found problems")
 			}
 			report(true, "config", cfgPath)
-			_, tmuxErr := exec.LookPath("tmux")
-			report(tmuxErr == nil, "tmux", "needed by run.sh")
+			if runtime.GOOS != "windows" {
+				_, tmuxErr := exec.LookPath("tmux")
+				report(tmuxErr == nil, "tmux", "needed by run.sh")
+			}
 			if cfg.Web.Enabled {
 				info, err := os.Stat(cfg.Web.ProfileDir)
 				if err != nil || !info.IsDir() {

@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"openmini/internal/backend"
@@ -40,6 +39,7 @@ type Agy struct {
 }
 
 func New(cfg config.Agy, timeoutSec int, logf func(string, ...any)) *Agy {
+	cfg.Binary = backend.FindAgy(cfg.Binary)
 	if strings.HasPrefix(cfg.Binary, "~/") {
 		home, _ := os.UserHomeDir()
 		cfg.Binary = filepath.Join(home, cfg.Binary[2:])
@@ -138,7 +138,7 @@ func (a *Agy) Complete(c backend.Call) (backend.Result, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, a.cfg.Binary, args...)
 	cmd.Dir = a.cfg.Workspace
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = procAttr()
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return backend.Result{}, err
@@ -153,9 +153,8 @@ func (a *Agy) Complete(c backend.Call) (backend.Result, error) {
 		return backend.Result{}, fmt.Errorf("start agy: %v", err)
 	}
 	defer func() {
-		// stream-json mode never exits on its own; stop the whole process group
-		syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
-		time.AfterFunc(3*time.Second, func() { syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) })
+		// stream-json mode never exits on its own; stop the whole process tree
+		stopTree(cmd)
 		cmd.Wait()
 	}()
 

@@ -68,7 +68,8 @@ type Agy struct {
 
 type AgyAPI struct {
 	Enabled           bool     `toml:"enabled"`
-	TokenFile         string   `toml:"token_file"` // agy's stored OAuth token
+	TokenFile         string   `toml:"token_file"`
+	Credential        string   `toml:"credential"` // Windows: Credential Manager entry holding agy's session // agy's stored OAuth token
 	AgyBinary         string   `toml:"agy_binary"` // only used to refresh the token
 	UserAgent         string   `toml:"user_agent"`
 	IDEType           string   `toml:"ide_type"`
@@ -251,6 +252,9 @@ oversize_action = "web"
 # token is refreshed by running agy when it nears expiry.
 enabled = true
 token_file = "~/.gemini/antigravity-cli/antigravity-oauth-token"
+# On Windows agy keeps the session in the Credential Manager instead of a file;
+# this is the entry name it uses.
+credential = "gemini:antigravity"
 agy_binary = "~/.local/bin/agy"
 user_agent = "antigravity/1.13.0 linux/amd64"
 ide_type = "ANTIGRAVITY"

@@ -48,6 +48,7 @@ func New(cfg config.AgyAPI, timeoutSec int, logf func(string, ...any)) *AgyAPI {
 		return p
 	}
 	cfg.TokenFile = expand(cfg.TokenFile)
+	cfg.AgyBinary = backend.FindAgy(cfg.AgyBinary)
 	cfg.AgyBinary = expand(cfg.AgyBinary)
 	return &AgyAPI{cfg: cfg, timeout: timeoutSec, logf: logf, http: &http.Client{}}
 }
@@ -60,11 +61,20 @@ func (a *AgyAPI) Models() []string   { return a.models }
 // Token and project
 // ---------------------------------------------------------------------------
 
-// loadToken reads agy's token file (JSON: token.access_token, token.expiry).
+// loadToken reads agy's session (JSON: token.access_token, token.expiry) from
+// its token file, or on Windows from the Credential Manager entry.
 func (a *AgyAPI) loadToken() error {
 	raw, err := os.ReadFile(a.cfg.TokenFile)
 	if err != nil {
-		return fmt.Errorf("token file: %v (sign in with `agy` once)", err)
+		target := a.cfg.Credential
+		if target == "" {
+			target = "gemini:antigravity"
+		}
+		if kr, kerr := keyringToken(target); kerr == nil {
+			raw, err = kr, nil
+		} else {
+			return fmt.Errorf("no agy session: token file: %v; keyring %q: %v (sign in with `agy` once)", err, target, kerr)
+		}
 	}
 	var f struct {
 		Token struct {
@@ -73,7 +83,7 @@ func (a *AgyAPI) loadToken() error {
 		} `json:"token"`
 	}
 	if err := json.Unmarshal(raw, &f); err != nil || f.Token.AccessToken == "" {
-		return fmt.Errorf("token file %s has no access_token", a.cfg.TokenFile)
+		return fmt.Errorf("agy's stored session has no access_token")
 	}
 	a.access = f.Token.AccessToken
 	a.expiry, _ = time.Parse(time.RFC3339Nano, f.Token.Expiry)

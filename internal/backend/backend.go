@@ -4,8 +4,26 @@ package backend
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"unicode/utf8"
 )
+
+// FindAgy returns the agy binary to run: bin if it is on the PATH, else on
+// Windows the folder Google's installer uses (a shell opened before the
+// install does not see the new PATH yet).
+func FindAgy(bin string) string {
+	if _, err := exec.LookPath(bin); err == nil || runtime.GOOS != "windows" {
+		return bin
+	}
+	p := filepath.Join(os.Getenv("LOCALAPPDATA"), "agy", "bin", "agy.exe")
+	if _, err := os.Stat(p); err == nil {
+		return p
+	}
+	return bin
+}
 
 // Call is one prompt for a backend.
 type Call struct {
