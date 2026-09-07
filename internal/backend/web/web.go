@@ -960,14 +960,20 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
 				}
 				w.logf("web: %s reply finished after %.1fs (%d chars; thought %.0fs, wrote %.0fs)", c.ID, time.Since(t0).Seconds(), backend.Chars(last), thought, time.Since(opened).Seconds()-thought)
 				if w.cfg.ReplySource == "raw" {
-					// the network capture may lag the render by a moment
-					for i := 0; i < 20; i++ {
+					// The network capture completes after the page shows the reply as
+					// done, by seconds on a slow link. Wait for it: it carries the text
+					// exactly as the model wrote it, tags included.
+					waited := time.Now()
+					for time.Since(waited) < 30*time.Second {
 						if t := w.rawReply(); t != "" {
+							if d := time.Since(waited); d > 2*time.Second {
+								w.logf("web: %s raw stream arrived %.1fs after the page finished", c.ID, d.Seconds())
+							}
 							return t, nil
 						}
 						time.Sleep(150 * time.Millisecond)
 					}
-					w.logf("web: no raw stream captured; using the rendered reply")
+					w.logf("web: %s no raw stream within 30s; using the rendered reply (tags the page strips are lost)", c.ID)
 				}
 				if w.cfg.ReplySource == "copy" {
 					if t, err := w.copyReply(); err == nil {
