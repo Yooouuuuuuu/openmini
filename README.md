@@ -57,6 +57,13 @@ nothing and adds nothing; it uses what your subscription already gives you.
   timer and a Stop button, then the newest 10 finished ones. Older requests are in the day's log file. The page
   updates by push while something runs; there is no polling.
 
+## Reaching it from your phone
+
+Don't open the port to the internet. Put the PC and your phone on a [Tailscale](https://tailscale.com) tailnet
+instead: nothing to configure in openmini, and the same address works from anywhere, for example
+`http://desktop-name:18000/v1` as the base URL in your phone's chat app and `/usage` for the dashboard.
+`openmini doctor` prints the address once Tailscale is up. Set `api_keys` if other people share the tailnet.
+
 ## Good to know
 
 - **Tier limits are Google's.** On AI Pro the Antigravity service refuses `gemini-3.1-pro-high` (HTTP 400); use
