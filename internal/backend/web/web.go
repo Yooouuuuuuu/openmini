@@ -540,11 +540,36 @@ func (w *Web) currentModelLabel() string {
 // Model picker
 // ---------------------------------------------------------------------------
 
+// waitForPicker waits for the model picker button. The page builds it a
+// while after the prompt box, seconds on a slow machine at a busy hour, so
+// the wait has no fixed budget: it ends when the button is there, when the
+// page loses its prompt box (dead or navigated away), or when the request is
+// stopped.
+func (w *Web) waitForPicker(ctx context.Context) error {
+	btn := w.page.Locator("[data-test-id='bard-mode-menu-button']").First()
+	start := time.Now()
+	for {
+		if w.exists(btn) {
+			if d := time.Since(start); d > time.Second {
+				w.logf("web: model picker appeared %.1fs after the prompt box", d.Seconds())
+			}
+			return nil
+		}
+		if stopped(ctx) {
+			return fmt.Errorf("stopped by request")
+		}
+		if !w.exists(w.page.Locator(promptBoxSel)) {
+			return fmt.Errorf("model picker: the page lost its prompt box while the picker was loading")
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
 func (w *Web) openModelMenu() error {
-	if err := w.page.Locator("[data-test-id='bard-mode-menu-button']").First().Click(pw.LocatorClickOptions{Timeout: pw.Float(10000)}); err != nil {
+	if err := w.page.Locator("[data-test-id='bard-mode-menu-button']").First().Click(pw.LocatorClickOptions{Timeout: w.waitMillis()}); err != nil {
 		return fmt.Errorf("model picker: %v", err)
 	}
-	if err := w.page.Locator("[role='menuitem'] span.label").First().WaitFor(pw.LocatorWaitForOptions{State: pw.WaitForSelectorStateVisible, Timeout: pw.Float(5000)}); err != nil {
+	if err := w.page.Locator("[role='menuitem'] span.label").First().WaitFor(pw.LocatorWaitForOptions{State: pw.WaitForSelectorStateVisible, Timeout: pw.Float(15000)}); err != nil {
 		w.page.Keyboard().Press("Escape")
 		return fmt.Errorf("model menu did not open: %v", err)
 	}
@@ -659,7 +684,22 @@ func (w *Web) newChat(c backend.Call) error {
 		return fmt.Errorf("prompt box did not appear within %s", pageWait)
 	}
 	w.logf("web: new chat ready in %.1fs", time.Since(t0).Seconds())
+	if w.desiredModel != "" && w.desiredModel != w.currentModel {
+		if err := w.waitForPicker(c.Ctx); err != nil {
+			return err
+		}
+	}
 	note, err := w.ensureModel(w.desiredModel)
+	if err != nil && strings.Contains(err.Error(), "model picker") {
+		w.logf("web: %v; reloading the tab and trying once more", err)
+		if rerr := w.reload(); rerr != nil {
+			return rerr
+		}
+		if werr := w.waitForPicker(c.Ctx); werr != nil {
+			return werr
+		}
+		note, err = w.ensureModel(w.desiredModel)
+	}
 	if err != nil {
 		return err
 	}
