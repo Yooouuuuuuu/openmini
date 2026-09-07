@@ -80,6 +80,17 @@ instead: nothing to configure in openmini, and the same address works from anywh
 - **Logs** go to `logs\<date>.log`, one file per day, old ones removed. They hold ids, sizes and timings, never
   prompt or reply text.
 
+## If the web backend seems stuck
+
+Nothing times out by default. On a long prompt at a busy hour the Gemini app can think for many minutes before
+the first word, and openmini waits; the request block on the dashboard shows what it is doing (thinking, generating,
+how long). If a request should not continue, press its **Stop** button. If the page itself looks wrong, `POST
+/web/reload` reloads the Gemini tab; the next request also reloads a tab that looks wrong on its own.
+
+If you would rather have openmini give up by itself, two settings in `config.toml`, both in seconds and both
+`0` for no limit: `start_timeout` under `[web]` (how long to wait for a reply to open) and `timeout` under
+`[server]` (how long to wait for the whole reply). What actually happened is in `logs\<date>.log`.
+
 ## Security
 
 - `data\browser-profile` is a signed-in Google session, and agy's session is a full Antigravity login. Together

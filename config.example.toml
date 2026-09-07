@@ -45,8 +45,11 @@ long_prompt_mode = "attach"
 max_inline_chars = 100000
 attach_name = "prompt.txt"
 attach_fill_box = false
-# Seconds to wait for Gemini to open a reply after submitting; 0 = no limit.
-start_timeout = 180
+# Seconds to wait for Gemini to open a reply after the prompt is submitted.
+# 0 (the default) means no limit: openmini waits as long as Gemini takes,
+# and a request that should not continue is stopped from the dashboard.
+# Set a number only if you want it to give up on its own.
+start_timeout = 0
 # Extra attempts when Gemini answers with an error notice or refusal; 0 passes everything through.
 retries = 0
 # When the requested model is locked in the picker (usage limit reached):
