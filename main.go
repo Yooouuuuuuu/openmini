@@ -35,6 +35,7 @@ func main() {
 		a.Desc = "OpenAI-compatible endpoint over the Gemini web app and the Antigravity CLI"
 	})
 	app.Add(serveCmd(), stopCmd(), setupCmd(), loginCmd(), statusCmd(), doctorCmd(), initCmd())
+	keepConsoleAwake()
 	plain := len(os.Args) == 1 // double-click on Windows, or plain "openmini"
 	ran := ""
 	if plain {
