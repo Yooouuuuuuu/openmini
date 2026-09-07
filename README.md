@@ -2,60 +2,122 @@
 
 ![openmini dashboard](docs/dashboard.png)
 
-Your Google AI subscription as an OpenAI-compatible endpoint. Two backends behind one port:
+Your Google AI Pro subscription as an OpenAI-compatible endpoint, on your own machine. One exe, one port, three
+ways to reach Google behind it:
 
-- **web**: drives gemini.google.com in a signed-in browser (the Gemini app quota).
-- **agyapi**: calls the Antigravity backend service directly with agy's signed-in token (the Antigravity quota,
-  per-model usage, no message cap, real token counts). The recommended backend for long prompts.
-- **agy**: runs the Antigravity CLI with a tool-less agent (same quota, but the harness caps messages at 192,000
-  bytes and adds ~10k tokens of its own prompt per call).
+- **web** drives the Gemini web app in a signed-in browser. Uses the Gemini app's quota.
+- **agyapi** calls the Antigravity service directly, with the session of Google's Antigravity CLI. No message cap,
+  real token counts. The backend to use for long prompts.
+- **agy** runs the Antigravity CLI itself. Same quota as agyapi, but the CLI cuts messages after 192,000 bytes and
+  adds its own prompt on top of yours.
 
 ```bash
 curl http://localhost:18000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "web/3.1 Pro",
+  -d '{"model": "agyapi/gemini-3.1-pro-low",
        "messages": [{"role": "user", "content": "Write a two-sentence story about a cat who learns to sail."}]}'
 ```
 
-Model names pick the backend: `agyapi/gemini-3.1-pro-low`, `agyapi/claude-sonnet-4-6`, `web/3.1 Pro`, `agy/gemini-3.1-pro-low`,
-or `web/default` and `agy/default`. A bare name that exists in exactly one backend routes there; anything else goes
-to `default_backend`. `GET /v1/models` lists everything. Add `"stream": true` for server-sent events; the first
-chunk acknowledges the request and `: openmini phase=...` comments report submitted and generating before the text.
+Any OpenAI-compatible client works: base URL `http://localhost:18000/v1`, any API key until you set one. The model
+name picks the backend: `web/3.1 Pro`, `agyapi/gemini-3.1-pro-low`, `agyapi/claude-sonnet-4-6`,
+`agy/gemini-3.6-flash-low`. A bare name that exists in exactly one backend goes there; anything else goes to
+`default_backend`. `GET /v1/models` lists them all. Add `"stream": true` for streaming.
+
+## Get it (Windows)
+
+1. Download `openmini-<version>-windows-amd64.zip` from Releases and unzip it into a folder of your own, not
+   Downloads. Everything openmini writes stays in that folder.
+2. Double-click `openmini.exe`. The first run is a short wizard:
+   - **Antigravity.** If Google's Antigravity CLI (`agy`) is missing, it offers to run Google's installer, then to
+     sign you in; a browser opens for that.
+   - **Gemini web app.** Say yes and it downloads a browser once (about 150 MB) and opens a window for you to sign
+     in to Google. The session is kept in `data\browser-profile`.
+   - A desktop shortcut and a Start menu entry, if you want them.
+3. Double-click again to start. Windows Firewall asks once; allow it if other devices should reach it. The dashboard
+   is at <http://localhost:18000/usage>, the API at `http://localhost:18000/v1`.
+
+Windows will say the exe is unrecognised, because it is not code-signed: "More info", then "Run anyway".
+
+Stop it by closing its window, with Ctrl+C, or with `openmini stop` in PowerShell. `openmini doctor` checks
+everything, `openmini login` redoes the Gemini sign-in, `openmini setup` runs the wizard again.
+
+You need a Google account with a plan that includes the Gemini app and Antigravity, such as AI Pro. openmini charges
+nothing and adds nothing; it uses what your subscription already gives you.
+
+## The dashboard
+
+- **Usage wheels.** Big wheel = weekly limit, little wheel = 5-hour limit, colour from green to red by what is left.
+  One tile for the Gemini app, one for Antigravity; agy and agyapi draw from the same Antigravity quota.
+- **All usage checks are manual.** Opening the page fetches nothing; each Refresh asks one backend.
+- **Requests.** One block per backend: running requests with their phase (queued, submitted, thinking, generating), a
+  timer and a Stop button, then the newest 10 finished ones. Older requests are in the day's log file. The page
+  updates by push while something runs; there is no polling.
+
+## Good to know
+
+- **Tier limits are Google's.** On AI Pro the Antigravity service refuses `gemini-3.1-pro-high` (HTTP 400); use
+  `gemini-3.1-pro-low`. When the Gemini app's 5-hour window runs out it locks Pro and Flash and only Flash-Lite
+  answers; openmini refuses instead of silently downgrading (`unavailable_action`). The dashboard shows locks and
+  reset times.
+- **Size limits.** The Gemini web prompt box refuses single lines over about 32k characters; pasted prompts arrive
+  intact to about 100k characters and larger ones go as a file. agy drops everything after the first 192,000 bytes
+  of a message. `oversize_action` says what openmini does with a prompt that would be cut: reroute to agyapi (the
+  default), report, or refuse.
+- **Pass-through.** Whatever Gemini answers is the reply, including its own error notices and refusals. Failures
+  to get any reply come back as content prefixed `[openmini/<backend>]`, never as HTTP errors, except malformed
+  requests and bad API keys.
+- **Logs** go to `logs\<date>.log`, one file per day, old ones removed. They hold ids, sizes and timings, never
+  prompt or reply text.
+
+## Security
+
+- `data\browser-profile` is a signed-in Google session, and agy's session is a full Antigravity login. Together
+  they are your Google account. Keep the folder private; never share or commit it.
+- Do not expose the port to the internet. Localhost and your own tailnet (Tailscale) are the intended reach. On
+  any shared network set `api_keys` in `config.toml`; then every request needs `Authorization: Bearer <key>` and
+  only `/health` stays open. The debug endpoints below are covered by the same key.
+- openmini is not affiliated with Google. It automates your own account the way your browser and the official CLI
+  do; use it within Google's terms.
+
+## Other platforms
+
+Linux, WSL and macOS build from source with Go 1.22:
+
+```bash
+go build -o openmini .
+./openmini setup      # or ./run.sh, which also needs tmux
+```
+
+The Gemini sign-in needs a screen once (WSL needs WSLg); on a headless server, sign in on a PC and copy
+`data/browser-profile` over. Install agy with `curl -fsSL https://antigravity.google/cli/install.sh | bash` and run
+`agy` once; over SSH it prints a URL and takes a code back. agyapi reads agy's token file there.
+
+## Endpoints
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /usage` | the dashboard: usage wheels for the Gemini app and for Antigravity (agy and agyapi share one quota), each with its own Refresh button; running requests with Stop and the newest 10 per backend; nothing is fetched on open except cached values (`/` redirects here) |
-| `GET /usage/cached`, `POST /usage/refresh?backend=` | the cache behind that page; refresh asks one backend |
-| `POST /v1/chat/completions` | OpenAI chat completions |
-| `GET /v1/models` | all backend models, prefixed |
-| `GET /status` (`?format=text`) | what every request is doing: queued, submitted, generating, with elapsed time and characters so far |
-| `GET /debug/agyapi/quota` (`?method=retrieveUserQuotaSummary`) | the raw quota response from the Antigravity service |
-| `GET /status/stream` | the same, pushed as server-sent events whenever a request changes; what the dashboard listens to (no polling) |
+| `POST /v1/chat/completions` | OpenAI chat completions, streaming or not |
+| `GET /v1/models` | every model of every enabled backend, prefixed |
+| `GET /usage` | the dashboard (`/` redirects here) |
+| `GET /usage/cached`, `POST /usage/refresh?backend=` | the cache behind it; a refresh asks one backend |
+| `GET /status` (`?format=text`), `GET /status/stream` | what every request is doing, once or pushed as server-sent events |
 | `POST /requests/stop?id=` | cancel a running request |
-
-Request phases: `queued`, `submitted`, `thinking` (web only: the page shows the model thinking and no text yet), `generating`, then `finished`, `failed` or `stopped`. The dashboard at `/usage` shows them with a Stop button.
+| `POST /shutdown` | stop the server; accepted only from the same machine (`openmini stop`) |
 | `GET /health` | backend readiness |
-| `GET /debug/web/html`, `/debug/web/screenshot` | the live Gemini page, for fixing selectors |
+| `GET /debug/web/html`, `GET /debug/web/screenshot` | the live Gemini page, for fixing selectors |
+| `GET /debug/agyapi/quota` (`?method=retrieveUserQuotaSummary`) | the raw quota response from the Antigravity service |
+| `POST /tools/policy-bisect?last=1` | find which part of the last prompt Google's content policy rejects |
 
-## Setup
+## Configuration
 
-```bash
-./run.sh            # creates config.toml from the template on first run, builds, runs doctor, asks, starts tmux
-./openmini doctor   # checks alone
-./openmini status   # request state
-```
+`config.toml` sits next to the exe; the wizard writes it from `config.example.toml`, and the comments in that file
+explain every setting. The ones people change: `port`, `default_backend`, `api_keys`, which backends are
+`enabled`, the web backend's model (`3.1 Pro`, `3.8 Flash`, `3.5 Flash-Lite`), and `oversize_action`.
 
-Sign-in is done once by hand: for the web backend set `headless = false`, start, sign in to Google in the window,
-then switch back to headless; for agy and agyapi run `agy` once in a terminal (agyapi reuses agy's token file and
-lets agy refresh it). `config.toml` is yours and not committed;
-`config.example.toml` is the template. Logs go to `logs/<date>.log`, one file per day, old ones removed; they hold
-ids, sizes and timings, never prompt or reply text.
+## Development
 
-## Notes
+`assets/icon.svg` is the icon; `winres/` and `rsrc_windows_amd64.syso` embed it in the Windows exe (regenerate with
+`go-winres make --in winres/winres.json --out rsrc`). `scripts/` holds two test scripts used during development.
+Build the Windows exe from anywhere with `GOOS=windows GOARCH=amd64 go build -o dist/openmini.exe .`
 
-- Size limits: the Gemini web box refuses single lines over ~32k characters, pasted prompts arrive intact up to ~100k characters
-  and larger ones go as a file attachment; agy silently drops everything after the first 192,000 bytes of a message (about 100k Chinese or
-  190k English characters), verified with a numbered-line test; openmini reroutes, reports or refuses such prompts (`oversize_action`).
-- Gemini's own error notices and refusals are passed through as the reply. Failures to get any reply come back as
-  content prefixed `[openmini/<backend>]`, never as HTTP errors, except malformed requests and bad API keys.
-- Set `api_keys` in config.toml before exposing the port beyond localhost or your tailnet.
+MIT licensed.
