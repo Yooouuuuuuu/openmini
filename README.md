@@ -1,6 +1,6 @@
-# openmini
+<p align="center"><img src="assets/icon.png" width="128" alt="openmini"></p>
 
-![openmini dashboard](assets/dashboard.png)
+# openmini
 
 Your Google AI Pro subscription as an OpenAI-compatible endpoint, on your own machine. One exe, one port, three
 ways to reach Google behind it:
@@ -47,6 +47,8 @@ You need a Google account with a plan that includes the Gemini app and Antigravi
 nothing and adds nothing; it uses what your subscription already gives you.
 
 ## The dashboard
+
+![openmini dashboard](assets/dashboard.png)
 
 - **Usage wheels.** Big wheel = weekly limit, little wheel = 5-hour limit, colour from green to red by what is left.
   One tile for the Gemini app, one for Antigravity; agy and agyapi draw from the same Antigravity quota.
