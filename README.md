@@ -1,6 +1,6 @@
 # openmini
 
-![openmini dashboard](docs/dashboard.png)
+![openmini dashboard](assets/dashboard.png)
 
 Your Google AI Pro subscription as an OpenAI-compatible endpoint, on your own machine. One exe, one port, three
 ways to reach Google behind it:
@@ -27,14 +27,16 @@ name picks the backend: `web/3.1 Pro`, `agyapi/gemini-3.1-pro-low`, `agyapi/clau
 
 1. Download `openmini-<version>-windows-amd64.zip` from Releases and unzip it into a folder of your own, not
    Downloads. Everything openmini writes stays in that folder.
-2. Double-click `openmini.exe`. The first run is a short wizard:
+2. Double-click `openmini.exe`. The first time, this runs the setup wizard, not the server:
    - **Antigravity.** If Google's Antigravity CLI (`agy`) is missing, it offers to run Google's installer, then to
      sign you in; a browser opens for that.
    - **Gemini web app.** Say yes and it downloads a browser once (about 150 MB) and opens a window for you to sign
      in to Google. The session is kept in `data\browser-profile`.
    - A desktop shortcut and a Start menu entry, if you want them.
-3. Double-click again to start. Windows Firewall asks once; allow it if other devices should reach it. The dashboard
-   is at <http://localhost:18000/usage>, the API at `http://localhost:18000/v1`.
+   - At the end it offers to start openmini right away.
+3. From then on, double-clicking `openmini.exe` (or the shortcut) starts the server. Windows Firewall asks once;
+   allow it if other devices should reach it. The dashboard is at <http://localhost:18000/usage>, the API at
+   `http://localhost:18000/v1`.
 
 Windows will say the exe is unrecognised, because it is not code-signed: "More info", then "Run anyway".
 
