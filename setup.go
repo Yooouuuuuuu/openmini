@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -93,6 +94,24 @@ func setValue(text, section, key, value string) string {
 		return text
 	}
 	return text[:loc[2]] + value + text[loc[3]:]
+}
+
+// psq quotes a string for a single-quoted PowerShell literal.
+func psq(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+
+// createShortcut makes a .lnk to this exe in a Windows special folder
+// ("Desktop" or "Programs", the Start menu), pointing at the exe's own folder
+// so config.toml and data/ are found.
+func createShortcut(folder string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	ps := "$d=[Environment]::GetFolderPath(" + psq(folder) + "); " +
+		"$s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $d 'openmini.lnk')); " +
+		"$s.TargetPath=" + psq(exe) + "; $s.WorkingDirectory=" + psq(filepath.Dir(exe)) + "; " +
+		"$s.IconLocation=" + psq(exe+",0") + "; $s.Description='openmini'; $s.Save()"
+	return exec.Command("powershell", "-NoProfile", "-Command", ps).Run()
 }
 
 // webLogin opens the visible browser and waits until the Gemini app shows an
@@ -205,6 +224,19 @@ func setupCmd() *gcli.Command {
 			}
 			if err := os.WriteFile(cfgPath, []byte(body), 0644); err != nil {
 				return err
+			}
+			if runtime.GOOS == "windows" {
+				fmt.Println()
+				if ask(in, "Create a desktop shortcut?", true) {
+					if err := createShortcut("Desktop"); err != nil {
+						fmt.Println("could not create the shortcut:", err)
+					}
+				}
+				if ask(in, "Add openmini to the Start menu?", true) {
+					if err := createShortcut("Programs"); err != nil {
+						fmt.Println("could not add it to the Start menu:", err)
+					}
+				}
 			}
 			fmt.Println()
 			fmt.Printf("done. Start it with %s\n", startHint())
