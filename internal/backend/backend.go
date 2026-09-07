@@ -8,19 +8,35 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"unicode/utf8"
 )
 
-// FindAgy returns the agy binary to run: bin if it is on the PATH, else on
-// Windows the folder Google's installer uses (a shell opened before the
-// install does not see the new PATH yet).
+// FindAgy returns the agy binary to run: bin (with a leading ~ expanded) if
+// it exists or is on the PATH, else the folder Google's installer uses on this
+// OS (a shell opened before the install does not see the new PATH yet).
 func FindAgy(bin string) string {
-	if _, err := exec.LookPath(bin); err == nil || runtime.GOOS != "windows" {
+	if bin == "" {
+		bin = "agy"
+	}
+	if strings.HasPrefix(bin, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			bin = filepath.Join(home, bin[2:])
+		}
+	}
+	if _, err := exec.LookPath(bin); err == nil {
 		return bin
 	}
-	p := filepath.Join(os.Getenv("LOCALAPPDATA"), "agy", "bin", "agy.exe")
-	if _, err := os.Stat(p); err == nil {
-		return p
+	var p string
+	if runtime.GOOS == "windows" {
+		p = filepath.Join(os.Getenv("LOCALAPPDATA"), "agy", "bin", "agy.exe")
+	} else if home, err := os.UserHomeDir(); err == nil {
+		p = filepath.Join(home, ".local", "bin", "agy")
+	}
+	if p != "" {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
 	}
 	return bin
 }

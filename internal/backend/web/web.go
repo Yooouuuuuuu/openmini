@@ -378,6 +378,41 @@ func (w *Web) thinkingChars() int {
 	return 0
 }
 
+// SignedIn re-checks the page for the account menu.
+func (w *Web) SignedIn() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.page == nil {
+		return false
+	}
+	w.signedIn = w.exists(w.page.Locator(signedInSel))
+	return w.signedIn
+}
+
+// WaitSignedIn polls until the user has signed in through the visible window.
+func (w *Web) WaitSignedIn(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if w.SignedIn() {
+			return nil
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("not signed in after %s", timeout)
+}
+
+// Close shuts the browser down (the profile on disk keeps the session).
+func (w *Web) Close() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.ctx != nil {
+		w.ctx.Close()
+	}
+	if w.pwInstance != nil {
+		w.pwInstance.Stop()
+	}
+}
+
 // Reload forces the chat tab back to a fresh app page. Used after a request
 // ends in a stuck state and on demand.
 func (w *Web) Reload() error {

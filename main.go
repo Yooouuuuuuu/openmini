@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,8 +34,22 @@ func main() {
 		a.Version = version
 		a.Desc = "OpenAI-compatible endpoint over the Gemini web app and the Antigravity CLI"
 	})
-	app.Add(serveCmd(), statusCmd(), doctorCmd(), initCmd())
-	app.Run(nil)
+	app.Add(serveCmd(), setupCmd(), loginCmd(), statusCmd(), doctorCmd(), initCmd())
+	plain := len(os.Args) == 1 // double-click on Windows, or plain "openmini"
+	if plain {
+		if _, err := os.Stat("config.toml"); err != nil {
+			os.Args = append(os.Args, "setup") // first run: the wizard
+		} else {
+			os.Args = append(os.Args, "serve")
+		}
+	}
+	app.ExitOnEnd = false
+	code := app.Run(nil)
+	if plain && runtime.GOOS == "windows" { // keep the console open so messages can be read
+		fmt.Print("\npress Enter to close ")
+		bufio.NewReader(os.Stdin).ReadString('\n')
+	}
+	os.Exit(code)
 }
 
 func withConfigOpt(c *gcli.Command) {
@@ -147,7 +162,7 @@ func initCmd() *gcli.Command {
 			if err := config.WriteTemplate(cfgPath); err != nil {
 				return err
 			}
-			fmt.Printf("wrote %s; edit it, then run ./run.sh\n", cfgPath)
+			fmt.Printf("wrote %s; edit it, then run %s\n", cfgPath, startHint())
 			return nil
 		},
 	}
@@ -180,7 +195,7 @@ func doctorCmd() *gcli.Command {
 			if cfg.Web.Enabled {
 				info, err := os.Stat(cfg.Web.ProfileDir)
 				if err != nil || !info.IsDir() {
-					report(false, "web profile", cfg.Web.ProfileDir+" missing: first run needs headless = false to sign in")
+					report(false, "web profile", cfg.Web.ProfileDir+" missing: run `openmini login` to sign in once")
 				} else {
 					report(true, "web profile", cfg.Web.ProfileDir)
 				}

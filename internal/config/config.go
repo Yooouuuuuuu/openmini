@@ -233,7 +233,7 @@ unavailable_action = "fail"
 [agy]
 # Runs the Antigravity CLI (agy) with a tool-less custom agent.
 enabled = true
-binary = "~/.local/bin/agy"
+binary = "agy" # name on the PATH or a full path; the install folder is tried too
 agent = "storyteller"
 mode = "plan"
 model = "gemini-3.1-pro-low"
@@ -255,7 +255,7 @@ token_file = "~/.gemini/antigravity-cli/antigravity-oauth-token"
 # On Windows agy keeps the session in the Credential Manager instead of a file;
 # this is the entry name it uses.
 credential = "gemini:antigravity"
-agy_binary = "~/.local/bin/agy"
+agy_binary = "agy"
 user_agent = "antigravity/1.13.0 linux/amd64"
 ide_type = "ANTIGRAVITY"
 # The CLI's token is entitled on the daily host (what agy itself calls); the
