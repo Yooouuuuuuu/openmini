@@ -36,18 +36,36 @@ func main() {
 	})
 	app.Add(serveCmd(), stopCmd(), setupCmd(), loginCmd(), statusCmd(), doctorCmd(), initCmd())
 	plain := len(os.Args) == 1 // double-click on Windows, or plain "openmini"
+	ran := ""
 	if plain {
 		if _, err := os.Stat("config.toml"); err != nil {
-			os.Args = append(os.Args, "setup") // first run: the wizard
+			ran = "setup" // first run: the wizard
 		} else {
-			os.Args = append(os.Args, "serve")
+			ran = "serve"
 		}
+		os.Args = append(os.Args, ran)
 	}
 	app.ExitOnEnd = false
 	code := app.Run(nil)
-	if plain && runtime.GOOS == "windows" { // keep the console open so messages can be read
-		fmt.Print("\npress Enter to close ")
-		bufio.NewReader(os.Stdin).ReadString('\n')
+	if plain && runtime.GOOS == "windows" { // a double-clicked console: say what happened and keep it open
+		in := bufio.NewReader(os.Stdin)
+		switch {
+		case ran == "setup" && code == 0:
+			fmt.Println()
+			if ask(in, "Start openmini now?", true) {
+				exe, _ := os.Executable()
+				serve := exec.Command(exe, "serve")
+				serve.Stdin, serve.Stdout, serve.Stderr = os.Stdin, os.Stdout, os.Stderr
+				serve.Run()
+				fmt.Println("\nopenmini has stopped.")
+			} else {
+				fmt.Println("\nSetup is finished. Double-click openmini.exe whenever you want to start openmini.")
+			}
+		case ran == "serve":
+			fmt.Println("\nopenmini has stopped.")
+		}
+		fmt.Print("Press Enter to close this window. ")
+		in.ReadString('\n')
 	}
 	os.Exit(code)
 }
