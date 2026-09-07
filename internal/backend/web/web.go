@@ -109,10 +109,14 @@ type Web struct {
 	signedIn   bool
 
 	modelOptions []string
-	unavailable  []string          // picker entries currently disabled (usage limit reached)
-	entryNotes   map[string]string // description text shown under a picker entry (e.g. reset hint)
-	usageCache   map[string]any
-	usageRead    time.Time
+
+	modeOptions []string // picker entries that are switches on top of a model (extended thinking)
+
+	activeModes []string          // the switches currently on
+	unavailable []string          // picker entries currently disabled (usage limit reached)
+	entryNotes  map[string]string // description text shown under a picker entry (e.g. reset hint)
+	usageCache  map[string]any
+	usageRead   time.Time
 
 	streamMu   sync.Mutex
 	lastStream []byte // body of the last StreamGenerate response seen on the page
@@ -330,7 +334,10 @@ func (w *Web) Start() error {
 	}
 	if labels, sel, off, err := w.readModelMenu(); err == nil {
 		w.modelOptions, w.currentModel, w.unavailable = labels, sel, off
-		w.logf("web: signed in; model picker %v, selected %q, unavailable %v", labels, sel, off)
+		w.logf("web: signed in; model picker %v, selected %q, switches on %v, unavailable %v", labels, sel, w.activeModes, off)
+		if len(w.activeModes) > 0 {
+			w.currentModel = "" // make the first request settle the switches
+		}
 	} else {
 		w.logf("web: signed in; picker shows %q (menu not readable: %v)", w.currentModelLabel(), err)
 	}
@@ -583,6 +590,8 @@ func (w *Web) readModelMenu() (labels []string, selected string, disabled []stri
 		return nil, "", nil, err
 	}
 	defer w.page.Keyboard().Press("Escape")
+	var modes, active []string
+	defer func() { w.modeOptions, w.activeModes = modes, active }()
 	items := w.page.Locator("[role='menuitem']")
 	n, _ := items.Count()
 	for i := 0; i < n; i++ {
@@ -593,7 +602,17 @@ func (w *Web) readModelMenu() (labels []string, selected string, disabled []stri
 		}
 		lab = strings.TrimSpace(lab)
 		labels = append(labels, lab)
-		if w.exists(it.Locator("gem-menu-item-content.selected")) || w.exists(it.Locator("[data-mat-icon-name='check']")) {
+		// model entries carry a data-test-id; a switch on top of the model
+		// (extended thinking) has none and can be selected alongside a model
+		tid, _ := it.GetAttribute("data-test-id", pw.LocatorGetAttributeOptions{Timeout: pw.Float(1000)})
+		isMode := !strings.HasPrefix(tid, "bard-mode-option-")
+		isSel := w.exists(it.Locator("gem-menu-item-content.selected")) || w.exists(it.Locator("[data-mat-icon-name='check']"))
+		if isMode {
+			modes = append(modes, lab)
+			if isSel {
+				active = append(active, lab)
+			}
+		} else if isSel {
 			selected = lab
 		}
 		if dis, _ := it.GetAttribute("aria-disabled", pw.LocatorGetAttributeOptions{Timeout: pw.Float(1000)}); dis == "true" {
@@ -617,8 +636,40 @@ func (w *Web) readModelMenu() (labels []string, selected string, disabled []stri
 
 // ensureModel selects want. When the app has disabled that entry (usage
 // limit), it returns a note and the request proceeds on the current model.
+func (w *Web) isMode(label string) bool {
+	for _, m := range w.modeOptions {
+		if strings.EqualFold(m, label) {
+			return true
+		}
+	}
+	return false
+}
+
+// clickMenuItem opens the picker and clicks the entry with that label; the
+// menu closes by itself afterwards.
+func (w *Web) clickMenuItem(label string) error {
+	if err := w.openModelMenu(); err != nil {
+		return err
+	}
+	item := w.page.Locator("[role='menuitem']", pw.PageLocatorOptions{HasText: label})
+	if !w.exists(item) {
+		w.page.Keyboard().Press("Escape")
+		return fmt.Errorf("%q is not in the picker (entries: %v)", label, w.modelOptions)
+	}
+	if err := item.First().Click(pw.LocatorClickOptions{Timeout: w.waitMillis()}); err != nil {
+		w.page.Keyboard().Press("Escape")
+		return fmt.Errorf("clicking %q in the picker: %v", label, err)
+	}
+	time.Sleep(800 * time.Millisecond)
+	return nil
+}
+
 func (w *Web) ensureModel(want string) (note string, err error) {
-	if want == "" || want == w.currentModel {
+	if want == "" {
+		return "", nil
+	}
+	// already as asked: a plain model with no switch on, or the switch itself
+	if want == w.currentModel && (len(w.activeModes) == 0 || w.isMode(want)) {
 		return "", nil
 	}
 	labels, sel, off, err := w.readModelMenu()
@@ -626,7 +677,31 @@ func (w *Web) ensureModel(want string) (note string, err error) {
 		return "", err
 	}
 	w.modelOptions, w.currentModel, w.unavailable = labels, sel, off
+	if w.isMode(want) {
+		// a switch on top of the current model, e.g. extended thinking
+		on := false
+		for _, a := range w.activeModes {
+			on = on || strings.EqualFold(a, want)
+		}
+		if !on {
+			if err := w.clickMenuItem(want); err != nil {
+				return "", err
+			}
+			w.logf("web: %s switched on (on top of %q)", want, sel)
+		}
+		w.currentModel, w.activeModes = want, []string{want}
+		return "", nil
+	}
+	// a plain model was asked for: every switch off first
+	for _, a := range w.activeModes {
+		if err := w.clickMenuItem(a); err != nil {
+			return "", err
+		}
+		w.logf("web: %s switched off (plain %q requested)", a, want)
+	}
+	w.activeModes = nil
 	if want == sel {
+		w.currentModel = want
 		return "", nil
 	}
 	for _, d := range off {
@@ -642,19 +717,9 @@ func (w *Web) ensureModel(want string) (note string, err error) {
 			return note, nil
 		}
 	}
-	if err := w.openModelMenu(); err != nil {
+	if err := w.clickMenuItem(want); err != nil {
 		return "", err
 	}
-	item := w.page.Locator("[role='menuitem']", pw.PageLocatorOptions{HasText: want})
-	if !w.exists(item) {
-		w.page.Keyboard().Press("Escape")
-		return "", fmt.Errorf("model %q is not in the picker (entries: %v)", want, labels)
-	}
-	if err := item.First().Click(pw.LocatorClickOptions{Timeout: pw.Float(5000)}); err != nil {
-		w.page.Keyboard().Press("Escape")
-		return "", fmt.Errorf("selecting model %q: %v", want, err)
-	}
-	time.Sleep(800 * time.Millisecond)
 	w.currentModel = want
 	w.logf("web: model picker switched to %q", want)
 	return "", nil

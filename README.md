@@ -20,7 +20,8 @@ curl http://localhost:18000/v1/chat/completions \
 
 Any OpenAI-compatible client works: base URL `http://localhost:18000/v1`, any API key until you set one. The model
 name picks the backend: `web/3.1 Pro`, `agyapi/gemini-3.1-pro-low`, `agyapi/claude-sonnet-4-6`,
-`agy/gemini-3.6-flash-low`. A bare name that exists in exactly one backend goes there; anything else goes to
+`agy/gemini-3.6-flash-low`. In the Gemini app, extended thinking (延伸思考) is a switch on top of Pro: `web/3.1 Pro`
+runs plain Pro with the switch off, `web/延伸思考` turns it on. A bare name that exists in exactly one backend goes there; anything else goes to
 `default_backend`. `GET /v1/models` lists them all. Add `"stream": true` for streaming.
 
 ## Get it (Windows)
