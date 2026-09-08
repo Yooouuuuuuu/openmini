@@ -48,7 +48,7 @@ func main() {
 	}
 	app.ExitOnEnd = false
 	code := app.Run(nil)
-	if plain && runtime.GOOS == "windows" { // a double-clicked console: say what happened and keep it open
+	if plain && runtime.GOOS == "windows" && !spawnedWindow { // a double-clicked console: say what happened and keep it open
 		in := bufio.NewReader(os.Stdin)
 		switch {
 		case ran == "setup" && code == 0:
@@ -75,10 +75,16 @@ func withConfigOpt(c *gcli.Command) {
 	c.StrOpt(&cfgPath, "config", "c", "config.toml", "path to the configuration file")
 }
 
+var consoleMode bool
+var spawnedWindow bool // this process handed over to a detached copy with its own window
+
 func serveCmd() *gcli.Command {
 	return &gcli.Command{
 		Name: "serve", Desc: "start the HTTP server with the enabled backends",
-		Config: withConfigOpt,
+		Config: func(c *gcli.Command) {
+			withConfigOpt(c)
+			c.BoolOpt(&consoleMode, "console", "", false, "Windows: stay in the console instead of opening openmini's own window")
+		},
 		Func: func(c *gcli.Command, _ []string) error {
 			cfg, err := config.Load(cfgPath)
 			if err != nil {
@@ -88,7 +94,25 @@ func serveCmd() *gcli.Command {
 			if err != nil {
 				return err
 			}
+			if runtime.GOOS == "windows" && !consoleMode && os.Getenv("OPENMINI_WINDOW_CHILD") == "" {
+				// Start again without a console and let this one go: the copy
+				// that runs has only its own window (minimise hides it to the
+				// tray, close stops it), and this terminal can close.
+				if err := spawnDetached(cfg.Log.Directory); err == nil {
+					spawnedWindow = true
+					fmt.Println("openmini is running in its own window.")
+					return nil
+				}
+			}
 			logger.Printf("openmini %s starting", version)
+			sigs := make(chan os.Signal, 1)
+			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+			if runtime.GOOS == "windows" && !consoleMode {
+				url := fmt.Sprintf("http://localhost:%d/usage", cfg.Server.Port)
+				if runWindowed("openmini", url, func() { sigs <- syscall.SIGTERM }, logger.SetSink, logger.Printf) {
+					logger.Printf("running in openmini's own window: minimise hides it to the tray, close stops openmini")
+				}
+			}
 			backends := map[string]backend.Backend{}
 			var webDebug *web.Web
 			if cfg.Web.Enabled {
@@ -121,8 +145,6 @@ func serveCmd() *gcli.Command {
 				return fmt.Errorf("no backend enabled in %s", cfgPath)
 			}
 			srv := api.New(cfg, logger, backends, webDebug)
-			sigs := make(chan os.Signal, 1)
-			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 			go func() {
 				<-sigs
 				logger.Printf("shutting down")
@@ -130,6 +152,7 @@ func serveCmd() *gcli.Command {
 				if webDebug != nil {
 					webDebug.Stop()
 				}
+				closeWindow()
 				os.Exit(0)
 			}()
 			logger.Printf("listening on :%d (base URL http://localhost:%d/v1), default backend %s", cfg.Server.Port, cfg.Server.Port, cfg.Server.DefaultBackend)

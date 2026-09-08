@@ -47,6 +47,11 @@ everything, `openmini login` redoes the Gemini sign-in, `openmini setup` runs th
 You need a Google account with a plan that includes the Gemini app and Antigravity, such as AI Pro. openmini charges
 nothing and adds nothing; it uses what your subscription already gives you.
 
+**Its own window.** On Windows openmini runs in a small window of its own that shows the log. The minimise
+button hides it to the notification area (click the tray icon to bring it back, right-click for the menu), and the
+close button stops openmini. Nothing runs in the terminal you started it from, which can be closed. `openmini serve
+--console` keeps the old behaviour of staying in the terminal.
+
 ## The dashboard
 
 ![openmini dashboard](assets/dashboard.png)

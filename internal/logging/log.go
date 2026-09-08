@@ -18,6 +18,8 @@ type Logger struct {
 	day  string
 	file *os.File
 	std  *log.Logger
+	sink func(string) // mirrors every line (the Windows window)
+	ring []string     // the last lines, replayed to a sink attached late
 }
 
 func New(dir string, keepDays int) (*Logger, error) {
@@ -57,10 +59,29 @@ func (l *Logger) rotate() error {
 func (l *Logger) Printf(format string, args ...any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	line := time.Now().Format("2006/01/02 15:04:05") + " " + fmt.Sprintf(format, args...)
 	if err := l.rotate(); err == nil {
-		fmt.Fprintf(l.file, "%s %s\n", time.Now().Format("2006/01/02 15:04:05"), fmt.Sprintf(format, args...))
+		fmt.Fprintln(l.file, line)
 	}
 	l.std.Printf(format, args...)
+	l.ring = append(l.ring, line)
+	if len(l.ring) > 200 {
+		l.ring = l.ring[len(l.ring)-200:]
+	}
+	if l.sink != nil {
+		l.sink(line)
+	}
+}
+
+// SetSink mirrors every line to fn from now on, starting with the last lines
+// already written.
+func (l *Logger) SetSink(fn func(string)) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.sink = fn
+	for _, line := range l.ring {
+		fn(line)
+	}
 }
 
 // Housekeep deletes log files older than keep days.
