@@ -318,6 +318,24 @@ func (s *Server) handleModels(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"object": "list", "data": data})
 }
 
+// Shutdown cancels every active request so the backends stop working on
+// them (agy processes are killed, Gemini's stop button is pressed) and waits
+// briefly for them to wind down.
+func (s *Server) Shutdown() {
+	n := s.st.CancelAll()
+	if n == 0 {
+		return
+	}
+	s.log.Printf("stopping %d active request(s)", n)
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		if a, _ := s.st.Snapshot(); len(a) == 0 {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 // handleShutdown stops the server, but only when asked from this machine
 // (openmini stop, or the console), never from the network.
 func (s *Server) handleShutdown(c *fiber.Ctx) error {
@@ -530,8 +548,22 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 	}
 	id := newID()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	s.st.SetCancel(id, cancel)
+	// A body produced by a stream writer is written after this handler
+	// returns, so those paths cancel at the end of the writer instead of here.
+	bodyLater := req.Stream || s.cfg.Server.Keepalive > 0
+	if !bodyLater {
+		defer cancel()
+	}
+	var reasonMu sync.Mutex
+	stopReason := "" // set when the client goes away, so the record says why
+	clientGone := func() {
+		reasonMu.Lock()
+		stopReason = "client went away"
+		reasonMu.Unlock()
+		s.log.Printf("%s client went away; stopping", id)
+		cancel()
+	}
 	created := time.Now().Unix()
 	shown := req.Model
 	if shown == "" {
@@ -551,6 +583,7 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 	if rerouted != "" {
 		s.log.Printf("%s %s", id, rerouted)
 		s.st.Update(id, state.Queued, 0, rerouted)
+		s.st.SetFrom(id, "agy")
 	}
 	s.log.Printf("%s %s model=%q stream=%v prompt=%d chars", id, b.Name(), model, req.Stream, backend.Chars(full))
 	c.Set("X-Openmini-Request-Id", id)
@@ -570,6 +603,11 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 		}
 		if note == "stopped by request" || strings.HasSuffix(note, ": stopped by request") {
 			phase = state.Stopped
+			reasonMu.Lock()
+			if stopReason != "" {
+				note = stopReason
+			}
+			reasonMu.Unlock()
 		}
 		s.st.Finish(id, phase, backend.Chars(reply), note)
 		s.log.Printf("%s done in %.1fs phase=%s reply=%d chars usage=%v", id, time.Since(t0).Seconds(), phase, backend.Chars(reply), res.Usage)
@@ -588,16 +626,62 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 			s.st.Update(id, state.Phase(p), 0, note)
 		}
 		call.OnText = func(soFar string) { s.st.Update(id, state.Generating, backend.Chars(soFar), "") }
+		body := func(res backend.Result, reply string) fiber.Map {
+			return fiber.Map{
+				"id": id, "object": "chat.completion", "created": created, "model": shown,
+				"choices": []fiber.Map{{"index": 0, "message": fiber.Map{"role": "assistant", "content": reply}, "finish_reason": "stop"}},
+				"usage":   usageMap(res.Usage, full, reply),
+			}
+		}
+		if ka := s.cfg.Server.Keepalive; ka > 0 {
+			// Opt-in: a space every ka seconds while waiting is still valid
+			// JSON, and the first failed write says the client is gone.
+			c.Set("Content-Type", "application/json; charset=utf-8")
+			c.Set("X-Accel-Buffering", "no")
+			c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+				defer cancel()
+				var wmu sync.Mutex
+				dead := false
+				done := make(chan struct{})
+				go func() {
+					t := time.NewTicker(time.Duration(ka) * time.Second)
+					defer t.Stop()
+					for {
+						select {
+						case <-done:
+							return
+						case <-t.C:
+							wmu.Lock()
+							if !dead {
+								if _, err := w.WriteString(" "); err != nil || w.Flush() != nil {
+									dead = true
+									clientGone()
+								}
+							}
+							wmu.Unlock()
+						}
+					}
+				}()
+				res, err := b.Complete(call)
+				close(done)
+				wmu.Lock()
+				defer wmu.Unlock()
+				reply := finish(res, err, t0)
+				if dead {
+					return
+				}
+				j, _ := json.Marshal(body(res, reply))
+				w.Write(j)
+				w.Flush()
+			})
+			return nil
+		}
 		res, err := b.Complete(call)
 		reply := finish(res, err, t0)
 		if noteHeader != "" {
 			c.Set("X-Openmini-Note", noteHeader)
 		}
-		return c.JSON(fiber.Map{
-			"id": id, "object": "chat.completion", "created": created, "model": shown,
-			"choices": []fiber.Map{{"index": 0, "message": fiber.Map{"role": "assistant", "content": reply}, "finish_reason": "stop"}},
-			"usage":   usageMap(res.Usage, full, reply),
-		})
+		return c.JSON(body(res, reply))
 	}
 
 	c.Set("Content-Type", "text/event-stream")
@@ -605,13 +689,22 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 	c.Set("Connection", "keep-alive")
 	c.Set("X-Accel-Buffering", "no")
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+		defer cancel()
 		var mu sync.Mutex
 		var lastWrite time.Time
+		dead := false
 		write := func(line string) {
 			mu.Lock()
 			defer mu.Unlock()
-			w.WriteString(line)
-			w.Flush()
+			if dead {
+				return
+			}
+			if _, err := w.WriteString(line); err != nil || w.Flush() != nil {
+				// the client hung up: stop the backend instead of finishing for nobody
+				dead = true
+				clientGone()
+				return
+			}
 			lastWrite = time.Now()
 		}
 		send := func(v any) {
@@ -630,18 +723,19 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 		}
 		sent := ""
 		t0 := time.Now()
-		// keep-alive comments every 15s while nothing else is written, so
-		// clients and phones do not drop a slow but healthy request
+		// keep-alive comments every 5s while nothing else is written: clients
+		// and phones do not drop a slow but healthy request, and a client that
+		// hung up is noticed within a couple of writes
 		done := make(chan struct{})
 		go func() {
-			t := time.NewTicker(15 * time.Second)
+			t := time.NewTicker(5 * time.Second)
 			defer t.Stop()
 			for {
 				select {
 				case <-done:
 					return
 				case <-t.C:
-					if time.Since(lastWrite) >= 15*time.Second {
+					if time.Since(lastWrite) >= 4*time.Second {
 						write(": openmini keepalive\n\n")
 					}
 				}

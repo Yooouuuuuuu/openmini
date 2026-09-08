@@ -514,6 +514,20 @@ const pageWait = 60 * time.Second
 
 func (w *Web) waitMillis() *float64 { return pw.Float(float64(pageWait / time.Millisecond)) }
 
+// pressStop clicks Gemini's stop button if a reply is being generated, so the
+// account stops spending on a request nobody is waiting for.
+func (w *Web) pressStop() {
+	btn := w.page.Locator(busyIconSel).First()
+	if !w.exists(btn) {
+		return
+	}
+	if err := btn.Click(pw.LocatorClickOptions{Timeout: pw.Float(2000)}); err == nil {
+		w.logf("web: pressed stop on the page")
+	} else {
+		w.logf("web: could not press stop on the page: %v", err)
+	}
+}
+
 // stopped reports whether the request's context has been cancelled.
 func stopped(ctx context.Context) bool {
 	if ctx == nil {
@@ -973,6 +987,7 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
 
 	for {
 		if stopped(c.Ctx) {
+			w.pressStop()
 			return "", fmt.Errorf("stopped by request")
 		}
 		if n, _ := responses.Count(); n > before {
@@ -1007,6 +1022,10 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
 		noText = 6 * time.Minute
 	}
 	for {
+		if stopped(c.Ctx) {
+			w.pressStop()
+			return last, fmt.Errorf("stopped by request")
+		}
 		// The reply element can vanish when Gemini reloads the page; without
 		// this the loop would wait forever on nothing.
 		if !w.exists(reply) {

@@ -31,6 +31,7 @@ type Request struct {
 	PromptChars int       `json:"prompt_chars"`
 	ReplyChars  int       `json:"reply_chars"`
 	Note        string    `json:"note,omitempty"`
+	From        string    `json:"from,omitempty"` // backend the request was sent to before a reroute
 }
 
 type Registry struct {
@@ -75,6 +76,32 @@ func (r *Registry) SetCancel(id string, fn func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.cancels[id] = fn
+}
+
+// SetFrom records the backend a request was rerouted away from.
+func (r *Registry) SetFrom(id, from string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	defer r.notify()
+	if q, ok := r.active[id]; ok {
+		q.From = from
+	}
+}
+
+// CancelAll stops every active request and returns how many there were.
+func (r *Registry) CancelAll() int {
+	r.mu.Lock()
+	fns := make([]func(), 0, len(r.cancels))
+	for _, fn := range r.cancels {
+		if fn != nil {
+			fns = append(fns, fn)
+		}
+	}
+	r.mu.Unlock()
+	for _, fn := range fns {
+		fn()
+	}
+	return len(fns)
 }
 
 // Cancel stops the active request id and reports whether it was found.

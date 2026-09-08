@@ -120,18 +120,19 @@ func serveCmd() *gcli.Command {
 			if len(backends) == 0 {
 				return fmt.Errorf("no backend enabled in %s", cfgPath)
 			}
+			srv := api.New(cfg, logger, backends, webDebug)
 			sigs := make(chan os.Signal, 1)
 			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 			go func() {
 				<-sigs
 				logger.Printf("shutting down")
+				srv.Shutdown() // stop what the backends are doing for requests nobody will read
 				if webDebug != nil {
 					webDebug.Stop()
 				}
 				os.Exit(0)
 			}()
 			logger.Printf("listening on :%d (base URL http://localhost:%d/v1), default backend %s", cfg.Server.Port, cfg.Server.Port, cfg.Server.DefaultBackend)
-			srv := api.New(cfg, logger, backends, webDebug)
 			srv.OnStop = func() { sigs <- syscall.SIGTERM } // "openmini stop" takes the same path as Ctrl+C
 			return srv.Listen()
 		},

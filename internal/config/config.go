@@ -23,6 +23,7 @@ type Server struct {
 	DefaultBackend string   `toml:"default_backend"` // backend used when the model name carries no prefix
 	APIKeys        []string `toml:"api_keys"`        // when non-empty, requests must carry one as a Bearer token
 	Timeout        int      `toml:"timeout"`         // seconds to wait for a complete reply; 0 = no limit
+	Keepalive      int      `toml:"keepalive"`       // non-streaming: a space every N seconds so a vanished client is noticed; 0 = off
 }
 
 type Log struct {
@@ -185,6 +186,10 @@ default_backend = "web"
 api_keys = []
 # Seconds to wait for a complete reply once it has started; 0 = no limit.
 timeout = 0
+# Non-streaming replies only: send a space every N seconds while waiting, so
+# a client that has gone away is noticed and its request stopped. The space
+# is valid JSON, but leave this at 0 unless you need it.
+keepalive = 0
 
 [log]
 directory = "./logs"

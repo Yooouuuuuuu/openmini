@@ -65,6 +65,13 @@ instead: nothing to configure in openmini, and the same address works from anywh
 `http://desktop-name:18000/v1` as the base URL in your phone's chat app and `/usage` for the dashboard.
 `openmini doctor` prints the address once Tailscale is up. Set `api_keys` if other people share the tailnet.
 
+If the phone cannot reach it while the PC's own browser can, Windows Firewall is blocking the port for other
+machines. Open it for the tailnet only, in PowerShell run as administrator:
+
+```powershell
+netsh advfirewall firewall add rule name="openmini" dir=in action=allow protocol=TCP localport=18000 remoteip=100.64.0.0/10
+```
+
 ## Good to know
 
 - **Tier limits are Google's.** On AI Pro the Antigravity service refuses `gemini-3.1-pro-high` (HTTP 400); use
