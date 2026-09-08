@@ -122,6 +122,14 @@ func serveCmd() *gcli.Command {
 				}
 				defer w.Stop()
 				backends["web"], webDebug = w, w
+				if n := cfg.Web.Lanes; n > 1 {
+					if pool, err := web.NewPool(w, n); err != nil {
+						logger.Printf("web: could not open %d lanes: %v (staying with one)", n, err)
+					} else {
+						backends["web"] = pool
+						logger.Printf("web: %d lanes; requests overlap up to that many", pool.Lanes())
+					}
+				}
 			}
 			if cfg.Agy.Enabled {
 				a := agy.New(cfg.Agy, cfg.Server.Timeout, logger.Printf)

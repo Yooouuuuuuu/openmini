@@ -40,6 +40,7 @@ type Prompt struct {
 type Web struct {
 	Enabled           bool   `toml:"enabled"`
 	Headless          bool   `toml:"headless"`
+	Lanes             int    `toml:"lanes"` // chat tabs working in parallel; 1 = one request at a time
 	ProfileDir        string `toml:"profile_dir"`
 	Model             string `toml:"model"`            // picker entry, e.g. "3.1 Pro"; empty leaves the picker alone
 	InputMethod       string `toml:"input_method"`     // "paste" or "insert"
@@ -113,6 +114,9 @@ func (c *Config) applyDefaults() {
 	w := &c.Web
 	if w.ProfileDir == "" {
 		w.ProfileDir = "./data/browser-profile"
+	}
+	if w.Lanes < 1 {
+		w.Lanes = 1
 	}
 	if w.InputMethod == "" {
 		w.InputMethod = "paste"
@@ -211,6 +215,10 @@ discourage_tools = false
 # Drives gemini.google.com in a browser with a persistent, signed-in profile.
 enabled = true
 headless = true
+# Chat tabs working in parallel in the same browser. 1 = one request at a
+# time (the default). 2 or 3 lets requests overlap; each tab costs memory and
+# the account's quota is spent faster.
+lanes = 1
 profile_dir = "./data/browser-profile"
 # Model picker entry to select, e.g. "3.1 Pro", "3.8 Flash". Empty leaves it.
 model = "3.1 Pro"

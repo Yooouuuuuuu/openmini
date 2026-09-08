@@ -87,6 +87,9 @@ netsh advfirewall firewall add rule name="openmini" dir=in action=allow protocol
   intact to about 100k characters and larger ones go as a file. agy drops everything after the first 192,000 bytes
   of a message. `oversize_action` says what openmini does with a prompt that would be cut: reroute to agyapi (the
   default), report, or refuse.
+- **Lanes.** The web backend answers one request at a time by default. `lanes = 2` (or 3) in `[web]` opens that
+  many chat tabs in the same browser so requests overlap; each tab costs memory and the account's quota is spent
+  faster. agy and agyapi already run requests in parallel.
 - **Pass-through.** Whatever Gemini answers is the reply, including its own error notices and refusals. Failures
   to get any reply come back as content prefixed `[openmini/<backend>]`, never as HTTP errors, except malformed
   requests and bad API keys.

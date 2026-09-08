@@ -301,8 +301,65 @@ func (w *Web) Start() error {
 	} else if w.page, err = w.ctx.NewPage(); err != nil {
 		return fmt.Errorf("new page: %v", err)
 	}
-	// Keep the raw model output: the page's streaming reply carries the text
-	// before any rendering strips tags from it.
+	w.captureStream()
+	if _, err = w.page.Goto(geminiURL, pw.PageGotoOptions{WaitUntil: pw.WaitUntilStateDomcontentloaded}); err != nil {
+		return fmt.Errorf("goto gemini: %v", err)
+	}
+	time.Sleep(2 * time.Second)
+	w.started = true
+	w.signedIn = w.exists(w.page.Locator(signedInSel))
+	if !w.signedIn {
+		w.logf("web: not signed in; profile %s. Set headless = false, restart, sign in once in the window.", profileDir)
+		return nil
+	}
+	w.readPickerAtStart("web")
+	return nil
+}
+
+// readPickerAtStart notes the model picker's state on a fresh tab and settles
+// the configured model.
+func (w *Web) readPickerAtStart(tag string) {
+	if labels, sel, off, err := w.readModelMenu(); err == nil {
+		w.modelOptions, w.currentModel, w.unavailable = labels, sel, off
+		w.logf("%s: signed in; model picker %v, selected %q, switches on %v, unavailable %v", tag, labels, sel, w.activeModes, off)
+		if len(w.activeModes) > 0 {
+			w.currentModel = "" // make the first request settle the switches
+		}
+	} else {
+		w.logf("%s: signed in; picker shows %q (menu not readable: %v)", tag, w.currentModelLabel(), err)
+	}
+	if _, err := w.ensureModel(w.cfg.Model); err != nil {
+		w.logf("%s: warning: %v", tag, err)
+	}
+}
+
+// NewLane opens one more chat tab in the same browser, with its own reply
+// capture and model state, so a second request can run while the first is
+// still generating. The clipboard is shared and serialised by clipMu.
+func (w *Web) NewLane(n int) (*Web, error) {
+	if err := w.Ready(); err != nil {
+		return nil, err
+	}
+	l := &Web{cfg: w.cfg, timeout: w.timeout, logf: w.logf, mdConv: w.mdConv, pwInstance: w.pwInstance, ctx: w.ctx, started: true, signedIn: true}
+	var err error
+	if l.page, err = w.ctx.NewPage(); err != nil {
+		return nil, fmt.Errorf("new tab: %v", err)
+	}
+	l.captureStream()
+	if _, err = l.page.Goto(geminiURL, pw.PageGotoOptions{WaitUntil: pw.WaitUntilStateDomcontentloaded}); err != nil {
+		return nil, fmt.Errorf("goto gemini: %v", err)
+	}
+	time.Sleep(2 * time.Second)
+	if !l.exists(l.page.Locator(signedInSel)) {
+		return nil, fmt.Errorf("the new tab is not signed in")
+	}
+	l.readPickerAtStart(fmt.Sprintf("web lane %d", n))
+	return l, nil
+}
+
+// captureStream keeps the raw model output: the page's streaming reply
+// carries the text before any rendering strips tags from it.
+func (w *Web) captureStream() {
 	w.page.On("response", func(r pw.Response) {
 		u := r.URL()
 		if !strings.Contains(u, "StreamGenerate") {
@@ -322,29 +379,6 @@ func (w *Web) Start() error {
 			}
 		}()
 	})
-	if _, err = w.page.Goto(geminiURL, pw.PageGotoOptions{WaitUntil: pw.WaitUntilStateDomcontentloaded}); err != nil {
-		return fmt.Errorf("goto gemini: %v", err)
-	}
-	time.Sleep(2 * time.Second)
-	w.started = true
-	w.signedIn = w.exists(w.page.Locator(signedInSel))
-	if !w.signedIn {
-		w.logf("web: not signed in; profile %s. Set headless = false, restart, sign in once in the window.", profileDir)
-		return nil
-	}
-	if labels, sel, off, err := w.readModelMenu(); err == nil {
-		w.modelOptions, w.currentModel, w.unavailable = labels, sel, off
-		w.logf("web: signed in; model picker %v, selected %q, switches on %v, unavailable %v", labels, sel, w.activeModes, off)
-		if len(w.activeModes) > 0 {
-			w.currentModel = "" // make the first request settle the switches
-		}
-	} else {
-		w.logf("web: signed in; picker shows %q (menu not readable: %v)", w.currentModelLabel(), err)
-	}
-	if _, err := w.ensureModel(w.cfg.Model); err != nil {
-		w.logf("web: warning: %v", err)
-	}
-	return nil
 }
 
 // chatTabHealthy reports whether the chat tab is in a state that can take a
@@ -941,6 +975,27 @@ func (w *Web) ask(c backend.Call) (string, error) {
 }
 
 // sendAndWait puts text into the box, submits, and returns the finished reply.
+// clipMu serialises clipboard use: the browser has one clipboard shared by
+// every tab, so two lanes must not paste or copy at the same time.
+var clipMu sync.Mutex
+
+// paste puts text on the clipboard and pastes it into the focused prompt box.
+func (w *Web) paste(text string) error {
+	clipMu.Lock()
+	defer clipMu.Unlock()
+	if err := w.ctx.GrantPermissions([]string{"clipboard-read", "clipboard-write"}); err != nil {
+		return fmt.Errorf("clipboard permission: %v", err)
+	}
+	if _, err := w.page.Evaluate(`t => navigator.clipboard.writeText(t)`, text); err != nil {
+		return fmt.Errorf("clipboard write: %v", err)
+	}
+	if err := w.page.Keyboard().Press("Control+V"); err != nil {
+		return fmt.Errorf("paste: %v", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+	return nil
+}
+
 func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
 	t0 := time.Now()
 	box := w.page.Locator(promptBoxSel)
@@ -948,16 +1003,9 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
 		return "", fmt.Errorf("prompt box not found: %v", err)
 	}
 	if w.cfg.InputMethod == "paste" {
-		if err := w.ctx.GrantPermissions([]string{"clipboard-read", "clipboard-write"}); err != nil {
-			return "", fmt.Errorf("clipboard permission: %v", err)
+		if err := w.paste(text); err != nil {
+			return "", err
 		}
-		if _, err := w.page.Evaluate(`t => navigator.clipboard.writeText(t)`, text); err != nil {
-			return "", fmt.Errorf("clipboard write: %v", err)
-		}
-		if err := w.page.Keyboard().Press("Control+V"); err != nil {
-			return "", fmt.Errorf("paste: %v", err)
-		}
-		time.Sleep(500 * time.Millisecond)
 	} else if err := box.Fill(text); err != nil {
 		return "", fmt.Errorf("typing prompt: %v", err)
 	}
@@ -1144,6 +1192,8 @@ func (w *Web) pageNotice() string {
 }
 
 func (w *Web) copyReply() (string, error) {
+	clipMu.Lock()
+	defer clipMu.Unlock()
 	if err := w.ctx.GrantPermissions([]string{"clipboard-read", "clipboard-write"}); err != nil {
 		return "", fmt.Errorf("clipboard permission: %v", err)
 	}
