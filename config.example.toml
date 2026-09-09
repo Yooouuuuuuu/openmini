@@ -45,6 +45,9 @@ headless = true
 # time (the default). 2 or 3 lets requests overlap; each tab costs memory and
 # the account's quota is spent faster.
 lanes = 1
+# Start every request as a temporary chat: Gemini does not keep it in the
+# account's history and does not use past chats as context.
+temporary_chat = true
 profile_dir = "./data/browser-profile"
 # Model picker entry to select, e.g. "3.1 Pro", "3.8 Flash". Empty leaves it.
 model = "3.1 Pro"

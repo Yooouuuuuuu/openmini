@@ -31,6 +31,7 @@ const (
 	busyIconSel   = "[data-mat-icon-name='stop']"
 	modelLabelSel = "[data-test-id='logo-pill-label-container'] .picker-primary-text"
 	signedInSel   = "[gem-open-account-menu]"
+	tempChatSel   = "temp-chat-button button" // the "temporary chat" toggle on a fresh chat
 
 	deadReplyAfter = 45 * time.Second
 
@@ -797,6 +798,11 @@ func (w *Web) newChat(c backend.Call) error {
 		return fmt.Errorf("prompt box did not appear within %s", pageWait)
 	}
 	w.logf("web: new chat ready in %.1fs", time.Since(t0).Seconds())
+	if w.cfg.TemporaryChat != nil && *w.cfg.TemporaryChat {
+		if err := w.startTemporaryChat(c.Ctx); err != nil {
+			return err
+		}
+	}
 	if w.desiredModel != "" && w.desiredModel != w.currentModel {
 		if err := w.waitForPicker(c.Ctx); err != nil {
 			return err
@@ -823,6 +829,47 @@ func (w *Web) newChat(c backend.Call) error {
 		if c.OnPhase != nil {
 			c.OnPhase("model", note)
 		}
+	}
+	return nil
+}
+
+// startTemporaryChat presses the temporary-chat toggle on the fresh chat and
+// reports what the page did, so a changed UI shows up in the log rather
+// than as silently saved chats.
+func (w *Web) startTemporaryChat(ctx context.Context) error {
+	// The toggle renders a moment after the prompt box, like the model
+	// picker: wait for it while the page is alive. Two minutes without it
+	// means the feature is gone from the page, not that it is slow.
+	btn := w.page.Locator(tempChatSel).First()
+	start := time.Now()
+	for !w.exists(btn) {
+		if stopped(ctx) {
+			return fmt.Errorf("stopped by request")
+		}
+		if !w.exists(w.page.Locator(promptBoxSel)) {
+			return fmt.Errorf("temporary chat: the page lost its prompt box while the toggle was loading")
+		}
+		if time.Since(start) > 2*time.Minute {
+			return fmt.Errorf("temporary chat: the toggle did not appear on the page in 2 minutes (temporary_chat = true)")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	if d := time.Since(start); d > time.Second {
+		w.logf("web: temporary-chat toggle appeared %.1fs after the prompt box", d.Seconds())
+	}
+	if err := btn.Click(pw.LocatorClickOptions{Timeout: pw.Float(5000)}); err != nil {
+		return fmt.Errorf("temporary chat: %v", err)
+	}
+	time.Sleep(1200 * time.Millisecond)
+	state, _ := w.page.Evaluate(`() => {
+		const b = document.querySelector("temp-chat-button button");
+		const cls = b ? (b.className + " " + (b.parentElement ? b.parentElement.className : "")) : "";
+		const main = document.querySelector("main, .chat-container, chat-window") || document.body;
+		return {url: location.href, pressed: b ? (b.getAttribute("aria-pressed") || "") : "", selected: /selected|active|pressed|checked/i.test(cls), text: (main.innerText || "").replace(/\s+/g, " ").slice(0, 160)};
+	}`, nil)
+	w.logf("web: temporary chat toggled: %v", state)
+	if !w.exists(w.page.Locator(promptBoxSel)) {
+		return fmt.Errorf("temporary chat: the prompt box vanished after the toggle")
 	}
 	return nil
 }

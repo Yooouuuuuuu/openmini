@@ -47,7 +47,8 @@ type Prompt struct {
 type Web struct {
 	Enabled           bool   `toml:"enabled"`
 	Headless          bool   `toml:"headless"`
-	Lanes             int    `toml:"lanes"` // chat tabs working in parallel; 1 = one request at a time
+	Lanes             int    `toml:"lanes"`          // chat tabs working in parallel; 1 = one request at a time
+	TemporaryChat     *bool  `toml:"temporary_chat"` // start every request as a temporary chat (not kept in the account\'s history)
 	ProfileDir        string `toml:"profile_dir"`
 	Model             string `toml:"model"`            // picker entry, e.g. "3.1 Pro"; empty leaves the picker alone
 	InputMethod       string `toml:"input_method"`     // "paste" or "insert"
@@ -130,6 +131,10 @@ func (c *Config) applyDefaults() {
 	}
 	if w.Lanes < 1 {
 		w.Lanes = 1
+	}
+	if w.TemporaryChat == nil {
+		on := true // an absent key means on; temporary_chat = false turns it off
+		w.TemporaryChat = &on
 	}
 	if w.InputMethod == "" {
 		w.InputMethod = "paste"
@@ -233,6 +238,9 @@ headless = true
 # time (the default). 2 or 3 lets requests overlap; each tab costs memory and
 # the account's quota is spent faster.
 lanes = 1
+# Start every request as a temporary chat: Gemini does not keep it in the
+# account's history and does not use past chats as context.
+temporary_chat = true
 profile_dir = "./data/browser-profile"
 # Model picker entry to select, e.g. "3.1 Pro", "3.8 Flash". Empty leaves it.
 model = "3.1 Pro"

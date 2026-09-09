@@ -93,6 +93,8 @@ netsh advfirewall firewall delete rule name="openmini"
   intact to about 100k characters and larger ones go as a file. agy drops everything after the first 192,000 bytes
   of a message. `oversize_action` says what openmini does with a prompt that would be cut: reroute to agyapi (the
   default), report, or refuse.
+- **Temporary chats.** Every web request starts as a Gemini temporary chat, so nothing openmini sends is kept in
+  the account's history or used as context for later chats. `temporary_chat = false` in `[web]` turns that off.
 - **Lanes.** The web backend answers one request at a time by default. `lanes = 2` (or 3) in `[web]` opens that
   many chat tabs in the same browser so requests overlap; each tab costs memory and the account's quota is spent
   faster. agy and agyapi already run requests in parallel.
