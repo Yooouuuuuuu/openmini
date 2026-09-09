@@ -41,6 +41,7 @@ type AgyAPI struct {
 	ready   error
 
 	deprecated map[string]string // old id -> the id the service wants now
+	sem        chan struct{}     // caps requests running at once (cfg.Parallel)
 }
 
 func New(cfg config.AgyAPI, timeoutSec int, logf func(string, ...any)) *AgyAPI {
@@ -54,7 +55,11 @@ func New(cfg config.AgyAPI, timeoutSec int, logf func(string, ...any)) *AgyAPI {
 	cfg.TokenFile = expand(cfg.TokenFile)
 	cfg.AgyBinary = backend.FindAgy(cfg.AgyBinary)
 	cfg.AgyBinary = expand(cfg.AgyBinary)
-	return &AgyAPI{cfg: cfg, timeout: timeoutSec, logf: logf, http: &http.Client{}}
+	n := cfg.Parallel
+	if n <= 0 {
+		n = 10
+	}
+	return &AgyAPI{cfg: cfg, timeout: timeoutSec, logf: logf, http: &http.Client{}, sem: make(chan struct{}, n)}
 }
 
 func (a *AgyAPI) Name() string       { return "agyapi" }
@@ -329,6 +334,8 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
 	if err := a.Ready(); err != nil {
 		return backend.Result{}, err
 	}
+	a.sem <- struct{}{}
+	defer func() { <-a.sem }()
 	id := c.Model
 	if id == "" {
 		id = a.cfg.Model

@@ -96,6 +96,7 @@ type AgyAPI struct {
 	Model             string   `toml:"model"`              // default model id, agy-style suffix allowed
 	Models            []string `toml:"models"`             // fallback list when the service lists none
 	CreditTypes       []string `toml:"credit_types"`       // subscription entitlements to use, e.g. ["GOOGLE_ONE_AI"]
+	Parallel          int      `toml:"parallel"`           // requests run at once; default 10
 	OfficialPrompt    bool     `toml:"official_prompt"`    // send the Antigravity identity snippet as the first system part
 	SystemInstruction string   `toml:"system_instruction"` // optional instruction of your own, sent after it
 	ProbeModel        string   `toml:"probe_model"`        // cheap model used by /tools/policy-bisect
@@ -173,6 +174,9 @@ func (c *Config) applyDefaults() {
 	if x.AgyBinary == "" {
 		x.AgyBinary = a.Binary
 	}
+	if x.Parallel <= 0 {
+		x.Parallel = 10
+	}
 	if x.UserAgent == "" {
 		x.UserAgent = "antigravity/1.13.0 linux/amd64"
 	}
@@ -192,7 +196,7 @@ func (c *Config) applyDefaults() {
 		a.Workspace = "./data/agy-workspace"
 	}
 	if a.Parallel <= 0 {
-		a.Parallel = 1
+		a.Parallel = 10
 	}
 }
 
@@ -297,10 +301,11 @@ mode = "plan"
 model = "gemini-3.1-pro-low"
 effort = ""
 workspace = "./data/agy-workspace"
-parallel = 1
-# agy silently drops everything after the first 192,000 bytes of a message (about 100k Chinese or 190k English characters). "web" hands such
-# prompts to the web backend (file attachment) with a note; "warn" sends them to
-# agy anyway and reports the cut; "fail" refuses them.
+# Requests agy runs at once; a burst overlaps instead of queueing. Default 10.
+# parallel = 10
+# agy silently drops everything after the first 192,000 bytes of a message. oversize_action says what to do with a
+# prompt that would be cut: "agyapi" reroutes it to agyapi (the default), "web" sends it to the web backend as a
+# file, "warn" lets agy cut it and notes that, "fail" refuses it.
 oversize_action = "agyapi"
 
 [agyapi]
@@ -330,4 +335,6 @@ credit_types = ["GOOGLE_ONE_AI"]
 official_prompt = false
 # Optional instruction of your own, sent after it as system text.
 system_instruction = ""
+# Requests agyapi runs at once. Default 10.
+# parallel = 10
 `

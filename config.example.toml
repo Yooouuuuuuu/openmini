@@ -93,10 +93,11 @@ mode = "plan"
 model = "gemini-3.1-pro-low"
 effort = ""
 workspace = "./data/agy-workspace"
-parallel = 1
-# agy silently drops everything after the first 192,000 bytes of a message (about 100k Chinese or 190k English characters). "web" hands such
-# prompts to the web backend (file attachment) with a note; "warn" sends them to
-# agy anyway and reports the cut; "fail" refuses them.
+# Requests agy runs at once; a burst overlaps instead of queueing. Default 10.
+# parallel = 10
+# agy silently drops everything after the first 192,000 bytes of a message. oversize_action says what to do with a
+# prompt that would be cut: "agyapi" reroutes it to agyapi (the default), "web" sends it to the web backend as a
+# file, "warn" lets agy cut it and notes that, "fail" refuses it.
 oversize_action = "agyapi"
 
 [agyapi]
@@ -126,3 +127,5 @@ credit_types = ["GOOGLE_ONE_AI"]
 official_prompt = false
 # Optional instruction of your own, sent after it as system text.
 system_instruction = ""
+# Requests agyapi runs at once. Default 10.
+# parallel = 10
