@@ -12,7 +12,7 @@ ways to reach Google behind it:
   adds its own prompt on top of yours.
 
 
-## Get it (Windows)
+## Install and Run on Windows
 
 You need a Google account on a plan that includes the Gemini app and Antigravity, such as AI Pro. openmini charges
 nothing and adds nothing; it uses what your subscription already gives you.
@@ -35,15 +35,19 @@ nothing and adds nothing; it uses what your subscription already gives you.
    '{"model":"agyapi/gemini-3.1-pro","messages":[{"role":"user","content":"Write a two-sentence story about a cat who learns to sail."}]}' | curl.exe -s http://localhost:18765/v1/chat/completions -H "Content-Type: application/json" -d "@-"
    ```
 
-### Running it
+### Run
 
-openmini runs in a small window of its own that shows the log. Minimise hides it to the notification area: click the
-tray icon to bring it back, right-click for the menu. Close stops openmini, as does Quit in the tray menu or
-`openmini stop` in PowerShell; there is no console to press Ctrl+C in unless you start it with `openmini serve
---console`. The terminal you launched it from can be closed. `openmini doctor` checks everything, `openmini login`
-redoes the Gemini sign-in, `openmini setup` runs the wizard again.
+openmini runs in a small window of its own that shows the log.
 
-**Updating.** Download the new zip, stop openmini, replace `openmini.exe`, start it again. `config.toml` and the
+Minimise hides it to the notification area: click the tray icon to bring it back, right-click for the menu.
+
+To stop it, close the window (the `x`), pick Quit from the tray menu, or run `openmini stop` in PowerShell.
+
+`openmini doctor` checks everything, `openmini login` redoes the Gemini sign-in, `openmini setup` runs the wizard again.
+
+### Update
+
+Download the new zip, stop openmini, replace `openmini.exe`, start it again. `config.toml` and the
 `data` folder (your Gemini sign-in, agy's state, history) stay as they are; `config.example.toml` in the zip shows
 any new settings, which all have working defaults when absent.
 
@@ -107,7 +111,10 @@ netsh advfirewall firewall delete rule name="openmini"
 ## If the web backend seems stuck
 
 Nothing times out by default, so on a long prompt at a busy hour the Gemini app may think for minutes before the
-first word and openmini waits. The dashboard shows what a request is doing; press its **Stop** button to end one.
+first word and openmini waits.
+
+The dashboard shows what a request is doing; press its **Stop** button to end one.
+
 To make openmini give up on its own, set `start_timeout` (`[web]`) or `timeout` (`[server]`) in `config.toml`, in
 seconds, `0` meaning no limit.
 
@@ -123,10 +130,15 @@ seconds, `0` meaning no limit.
 
 ## Other platforms
 
-Linux, WSL and macOS:
+Linux, WSL and macOS. Build and run:
 
 ```bash
 go build -o openmini . && ./openmini setup
+```
+
+Then a request:
+
+```bash
 curl -s localhost:18765/v1/chat/completions -H "Content-Type: application/json" \
   -d '{"model":"agyapi/gemini-3.1-pro","messages":[{"role":"user","content":"hello"}]}'
 ```
@@ -173,4 +185,6 @@ explain every setting. The ones people change: `port`, `default_backend`, `api_k
 Build the Windows exe from any platform: `GOOS=windows GOARCH=amd64 go build -o dist/openmini.exe .`
 
 openmini has run stably across a full day at every model and prompt sizes up to 300k characters; the readings are
-in [LATENCY.md](LATENCY.md). MIT licensed.
+in [LATENCY.md](LATENCY.md). It is a light check rather than a benchmark, since it spends real quota; run your own if you want to compare.
+
+MIT licensed.
