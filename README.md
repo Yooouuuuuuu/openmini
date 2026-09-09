@@ -187,4 +187,6 @@ Build the Windows exe from any platform: `GOOS=windows GOARCH=amd64 go build -o 
 openmini has run stably across a full day at every model and prompt sizes up to 300k characters; the readings are
 in [LATENCY.md](LATENCY.md). It is a light check rather than a benchmark, since it spends real quota; run your own if you want to compare.
 
-MIT licensed.
+## License
+
+MIT, see [LICENSE](LICENSE).
