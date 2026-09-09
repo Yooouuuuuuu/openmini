@@ -453,18 +453,25 @@ func (s *Server) probeModel(b backend.Backend) string {
 // completion is the OpenAI chat completion object (and its streaming chunk)
 // with the fields in the order clients and readers expect.
 type completion struct {
-	ID      string   `json:"id"`
-	Object  string   `json:"object"`
-	Created int64    `json:"created"`
-	Model   string   `json:"model"`
-	Choices []choice `json:"choices"`
-	Usage   any      `json:"usage,omitempty"`
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+	Choices any    `json:"choices"` // []choice for a completion, []chunkChoice for a stream chunk
+	Usage   any    `json:"usage,omitempty"`
 }
 
 type choice struct {
+	Index        int      `json:"index"`
+	Message      *message `json:"message"`
+	FinishReason any      `json:"finish_reason"`
+}
+
+// chunkChoice always carries a delta object, empty on the final chunk, as
+// clients expect.
+type chunkChoice struct {
 	Index        int       `json:"index"`
-	Message      *message  `json:"message,omitempty"`
-	Delta        fiber.Map `json:"delta,omitempty"`
+	Delta        fiber.Map `json:"delta"`
 	FinishReason any       `json:"finish_reason"`
 }
 
@@ -919,7 +926,7 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 		}
 		chunk := func(delta fiber.Map, finishReason any) completion {
 			return completion{ID: id, Object: "chat.completion.chunk", Created: created, Model: shown,
-				Choices: []choice{{Index: 0, Delta: delta, FinishReason: finishReason}}}
+				Choices: []chunkChoice{{Index: 0, Delta: delta, FinishReason: finishReason}}}
 		}
 		// first chunk acknowledges the request; phases follow as SSE comments
 		send(chunk(fiber.Map{"role": "assistant", "content": ""}, nil))
