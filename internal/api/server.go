@@ -450,6 +450,29 @@ func (s *Server) probeModel(b backend.Backend) string {
 	return flash
 }
 
+// completion is the OpenAI chat completion object (and its streaming chunk)
+// with the fields in the order clients and readers expect.
+type completion struct {
+	ID      string   `json:"id"`
+	Object  string   `json:"object"`
+	Created int64    `json:"created"`
+	Model   string   `json:"model"`
+	Choices []choice `json:"choices"`
+	Usage   any      `json:"usage,omitempty"`
+}
+
+type choice struct {
+	Index        int       `json:"index"`
+	Message      *message  `json:"message,omitempty"`
+	Delta        fiber.Map `json:"delta,omitempty"`
+	FinishReason any       `json:"finish_reason"`
+}
+
+type message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
 func (s *Server) handleModels(c *fiber.Ctx) error {
 	var data []fiber.Map
 	names := make([]string, 0, len(s.backends))
@@ -663,7 +686,14 @@ func newID() string {
 	return "chatcmpl-" + hex.EncodeToString(b)
 }
 
-func usageMap(u map[string]int, prompt, reply string) fiber.Map {
+type usage struct {
+	PromptTokens     int            `json:"prompt_tokens"`
+	CompletionTokens int            `json:"completion_tokens"`
+	TotalTokens      int            `json:"total_tokens"`
+	Details          map[string]int `json:"completion_tokens_details,omitempty"`
+}
+
+func usageMap(u map[string]int, prompt, reply string) usage {
 	in, out := u["input_tokens"], u["output_tokens"]
 	if in == 0 {
 		in = (utf8.RuneCountInString(prompt) + 3) / 4
@@ -671,9 +701,9 @@ func usageMap(u map[string]int, prompt, reply string) fiber.Map {
 	if out == 0 {
 		out = (utf8.RuneCountInString(reply) + 3) / 4
 	}
-	m := fiber.Map{"prompt_tokens": in, "completion_tokens": out, "total_tokens": in + out}
+	m := usage{PromptTokens: in, CompletionTokens: out, TotalTokens: in + out}
 	if t := u["thinking_tokens"]; t > 0 {
-		m["completion_tokens_details"] = fiber.Map{"reasoning_tokens": t}
+		m.Details = map[string]int{"reasoning_tokens": t}
 	}
 	return m
 }
@@ -741,12 +771,10 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 	s.log.Printf("%s %s model=%q stream=%v prompt=%d chars", id, b.Name(), model, req.Stream, backend.Chars(full))
 	c.Set("X-Openmini-Request-Id", id)
 
-	body := func(res backend.Result, reply string) fiber.Map {
-		return fiber.Map{
-			"id": id, "object": "chat.completion", "created": created, "model": shown,
-			"choices": []fiber.Map{{"index": 0, "message": fiber.Map{"role": "assistant", "content": reply}, "finish_reason": "stop"}},
-			"usage":   usageMap(res.Usage, full, reply),
-		}
+	body := func(res backend.Result, reply string) completion {
+		return completion{ID: id, Object: "chat.completion", Created: created, Model: shown,
+			Choices: []choice{{Index: 0, Message: &message{Role: "assistant", Content: reply}, FinishReason: "stop"}},
+			Usage:   usageMap(res.Usage, full, reply)}
 	}
 	// the history file: written now with the request, rewritten when done
 	histName := ""
@@ -889,9 +917,9 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 			j, _ := json.Marshal(v)
 			write("data: " + string(j) + "\n\n")
 		}
-		chunk := func(delta fiber.Map, finishReason any) fiber.Map {
-			return fiber.Map{"id": id, "object": "chat.completion.chunk", "created": created, "model": shown,
-				"choices": []fiber.Map{{"index": 0, "delta": delta, "finish_reason": finishReason}}}
+		chunk := func(delta fiber.Map, finishReason any) completion {
+			return completion{ID: id, Object: "chat.completion.chunk", Created: created, Model: shown,
+				Choices: []choice{{Index: 0, Delta: delta, FinishReason: finishReason}}}
 		}
 		// first chunk acknowledges the request; phases follow as SSE comments
 		send(chunk(fiber.Map{"role": "assistant", "content": ""}, nil))
