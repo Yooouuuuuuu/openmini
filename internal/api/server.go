@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"path"
 	"sort"
 	"strings"
 	"sync"
@@ -85,6 +86,9 @@ func (s *Server) Listen() error {
 	app.Post("/shutdown", s.handleShutdown)
 	app.Get("/v1/models", s.handleModels)
 	app.Post("/v1/chat/completions", s.handleChat)
+	// the same endpoints with every model a backend has, not just the curated set
+	app.Get("/all/v1/models", s.all(s.handleModels))
+	app.Post("/all/v1/chat/completions", s.all(s.handleChat))
 	app.Post("/tools/policy-bisect", s.handlePolicyBisect)
 	app.Get("/debug/agyapi/quota", func(c *fiber.Ctx) error {
 		b, ok := s.backends["agyapi"]
@@ -300,6 +304,117 @@ func (s *Server) resolve(name string) (backend.Backend, string, error) {
 	return b, "", nil
 }
 
+// all marks a request as made on /all/v1, where nothing is hidden.
+func (s *Server) all(h fiber.Handler) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		c.Locals("all", true)
+		return h(c)
+	}
+}
+
+// family strips a trailing thinking level, so gemini-3.6-flash-high and
+// gemini-3.6-flash-low are one model with two levels.
+func family(id string) (base, level string) {
+	low := strings.ToLower(id)
+	for _, l := range []string{"-low", "-medium", "-high"} {
+		if strings.HasSuffix(low, l) {
+			return id[:len(id)-len(l)], l[1:]
+		}
+	}
+	return id, ""
+}
+
+// curated is what /v1 offers out of a backend's list: nothing on the hide
+// list, and one entry per model, preferring the configured level, then the
+// cheaper ones, then whatever the model comes in.
+func (s *Server) curated(ids []string) []string {
+	hidden := func(id string) bool {
+		for _, p := range s.cfg.Models.Hide {
+			if strings.EqualFold(p, id) {
+				return true
+			}
+			if ok, _ := path.Match(strings.ToLower(p), strings.ToLower(id)); ok {
+				return true
+			}
+		}
+		return false
+	}
+	rank := func(level string) int {
+		order := []string{s.cfg.Models.Level, "low", "medium", "high", ""}
+		for i, l := range order {
+			if l == level {
+				return i
+			}
+		}
+		return len(order)
+	}
+	best := map[string]string{} // family -> chosen id
+	var order []string
+	for _, id := range ids {
+		if hidden(id) {
+			continue
+		}
+		base, level := family(id)
+		cur, seen := best[base]
+		if !seen {
+			best[base] = id
+			order = append(order, base)
+			continue
+		}
+		if _, curLevel := family(cur); rank(level) < rank(curLevel) {
+			best[base] = id
+		}
+	}
+	out := make([]string, 0, len(order))
+	for _, base := range order {
+		out = append(out, best[base])
+	}
+	return out
+}
+
+// onCurated reports whether a model a backend knows is offered on /v1. Ids
+// the backend does not list at all are left to the backend to judge.
+func (s *Server) onCurated(b backend.Backend, model string) bool {
+	known := false
+	for _, m := range b.Models() {
+		if strings.EqualFold(m, model) {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return true
+	}
+	for _, m := range s.curated(b.Models()) {
+		if strings.EqualFold(m, model) {
+			return true
+		}
+	}
+	return false
+}
+
+// probeModel is the cheap model the policy-bisect tool probes with: the
+// configured one, else the lowest Flash the backend lists.
+func (s *Server) probeModel(b backend.Backend) string {
+	if p := s.cfg.AgyAPI.ProbeModel; p != "" {
+		return p
+	}
+	var flash string
+	for _, m := range b.Models() {
+		l := strings.ToLower(m)
+		if !strings.Contains(l, "flash") {
+			continue
+		}
+		if strings.HasSuffix(l, "-low") {
+			return m
+		}
+		if flash == "" {
+			flash = m
+		}
+	}
+	return flash
+}
+
 func (s *Server) handleModels(c *fiber.Ctx) error {
 	var data []fiber.Map
 	names := make([]string, 0, len(s.backends))
@@ -308,7 +423,11 @@ func (s *Server) handleModels(c *fiber.Ctx) error {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		for _, m := range s.backends[n].Models() {
+		ids := s.backends[n].Models()
+		if c.Locals("all") != true {
+			ids = s.curated(ids)
+		}
+		for _, m := range ids {
 			data = append(data, fiber.Map{"id": n + "/" + m, "object": "model", "created": s.started.Unix(), "owned_by": "openmini"})
 		}
 	}
@@ -545,6 +664,10 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 	b, model, err := s.resolve(req.Model)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": fiber.Map{"message": err.Error(), "type": "invalid_request_error"}})
+	}
+	if c.Locals("all") != true && model != "" && !s.onCurated(b, model) {
+		msg := fmt.Sprintf("model %q is not offered on /v1; the same request works on /all/v1", req.Model)
+		return c.Status(400).JSON(fiber.Map{"error": fiber.Map{"message": msg, "type": "invalid_request_error"}})
 	}
 	id := newID()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -812,7 +935,7 @@ func (s *Server) handlePolicyBisect(c *fiber.Ctx) error {
 	// Probes must be cheap: one output token, so a fragment that passes the
 	// blocklist returns at once instead of generating a reply.
 	if c.Query("last") != "" && c.Query("model") == "" && b.Name() == "agyapi" {
-		model = s.cfg.AgyAPI.ProbeModel
+		model = s.probeModel(b)
 	}
 	blocked := func(text string) (bool, string) {
 		res, err := b.Complete(backend.Call{ID: "bisect", Model: model, Prompt: text, MaxTokens: 1})

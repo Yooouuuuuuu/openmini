@@ -16,6 +16,13 @@ type Config struct {
 	Web    Web    `toml:"web"`
 	Agy    Agy    `toml:"agy"`
 	AgyAPI AgyAPI `toml:"agyapi"`
+	Models Models `toml:"models"`
+}
+
+// Models says what /v1/models offers; /all/v1 always has everything.
+type Models struct {
+	Level string   `toml:"level"` // which thinking level stands for a model that comes in low/medium/high
+	Hide  []string `toml:"hide"`  // ids or glob patterns left off /v1
 }
 
 type Server struct {
@@ -99,6 +106,12 @@ func (c *Config) applyDefaults() {
 	if c.Server.Port == 0 {
 		c.Server.Port = 18765
 	}
+	if c.Models.Level == "" {
+		c.Models.Level = "low"
+	}
+	if c.Models.Hide == nil {
+		c.Models.Hide = []string{"延伸思考", "gemini-pro-agent"}
+	}
 	if c.Server.DefaultBackend == "" {
 		c.Server.DefaultBackend = "web"
 	}
@@ -154,16 +167,10 @@ func (c *Config) applyDefaults() {
 		x.Endpoint = "https://daily-cloudcode-pa.googleapis.com"
 	}
 	if x.Model == "" {
-		x.Model = "gemini-3.1-pro-high"
-	}
-	if x.ProbeModel == "" {
-		x.ProbeModel = "gemini-3.5-flash-low"
+		x.Model = "gemini-3.1-pro-low"
 	}
 	if x.CreditTypes == nil {
 		x.CreditTypes = []string{"GOOGLE_ONE_AI"}
-	}
-	if len(x.Models) == 0 {
-		x.Models = []string{"gemini-3.1-pro-high", "gemini-3.1-pro-low", "gemini-3.8-flash-high", "gemini-3.8-flash-low", "gemini-3.5-flash-lite"}
 	}
 	if a.Workspace == "" {
 		a.Workspace = "./data/agy-workspace"
@@ -194,6 +201,13 @@ timeout = 0
 # a client that has gone away is noticed and its request stopped. The space
 # is valid JSON, but leave this at 0 unless you need it.
 keepalive = 0
+
+[models]
+# What /v1/models offers: one entry per model, at this thinking level where a
+# model comes in low/medium/high, minus the hide list. Everything a backend
+# really has is on /all/v1 (the same endpoints with the full list).
+level = "low"
+hide = ["延伸思考", "gemini-pro-agent"]
 
 [log]
 directory = "./logs"

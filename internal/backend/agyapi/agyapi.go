@@ -39,6 +39,8 @@ type AgyAPI struct {
 	project string
 	models  []string
 	ready   error
+
+	deprecated map[string]string // old id -> the id the service wants now
 }
 
 func New(cfg config.AgyAPI, timeoutSec int, logf func(string, ...any)) *AgyAPI {
@@ -225,6 +227,20 @@ func (a *AgyAPI) fetchModels() []string {
 		os.MkdirAll("data", 0755)
 		os.WriteFile(filepath.Join("data", "agyapi-models.json"), raw, 0644)
 	}
+	// Ids the service has renamed: agy sends the new id when given the old
+	// one, and so do we.
+	a.deprecated = map[string]string{}
+	if m, ok := any(out).(map[string]any); ok {
+		if d, ok := m["deprecatedModelIds"].(map[string]any); ok {
+			for old, v := range d {
+				if mm, ok := v.(map[string]any); ok {
+					if nw, ok := mm["newModelId"].(string); ok && nw != "" {
+						a.deprecated[old] = nw
+					}
+				}
+			}
+		}
+	}
 	seen := map[string]bool{}
 	var ids []string
 	add := func(s string) {
@@ -317,7 +333,11 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
 	if id == "" {
 		id = a.cfg.Model
 	}
-	model := id // the service takes agy's slugs verbatim, e.g. gemini-3.1-pro-high
+	model := id // the service takes agy's slugs verbatim
+	if nw, ok := a.deprecated[id]; ok {
+		a.logf("agyapi: %s is deprecated by the service; sending %s", id, nw)
+		model = nw
+	}
 	gen := map[string]any{}
 	if c.MaxTokens > 0 {
 		gen["maxOutputTokens"] = c.MaxTokens

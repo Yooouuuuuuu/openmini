@@ -85,8 +85,8 @@ netsh advfirewall firewall delete rule name="openmini"
 
 ## Good to know
 
-- **Tier limits are Google's.** On AI Pro the Antigravity service refuses `gemini-3.1-pro-high` (HTTP 400); use
-  `gemini-3.1-pro-low`. When the Gemini app's 5-hour window runs out it locks Pro and Flash and only Flash-Lite
+- **Tier limits are Google's.** The Antigravity service has renamed `gemini-3.1-pro-high` to `gemini-pro-agent`;
+  openmini sends the new id when given the old one, so either works. When the Gemini app's 5-hour window runs out it locks Pro and Flash and only Flash-Lite
   answers; openmini refuses instead of silently downgrading (`unavailable_action`). The dashboard shows locks and
   reset times.
 - **Size limits.** The Gemini web prompt box refuses single lines over about 32k characters; pasted prompts arrive
@@ -141,7 +141,8 @@ The Gemini sign-in needs a screen once (WSL needs WSLg); on a headless server, s
 | Endpoint | Purpose |
 |---|---|
 | `POST /v1/chat/completions` | OpenAI chat completions, streaming or not |
-| `GET /v1/models` | every model of every enabled backend, prefixed |
+| `GET /v1/models` | one entry per model of every enabled backend, prefixed: the low thinking level where a model comes in low/medium/high, minus `[models] hide` |
+| `GET /all/v1/models`, `POST /all/v1/chat/completions` | the same endpoints with every model a backend has, nothing hidden |
 | `GET /usage` | the dashboard (`/` redirects here) |
 | `GET /usage/cached`, `POST /usage/refresh?backend=` | the cache behind it; a refresh asks one backend |
 | `GET /status` (`?format=text`), `GET /status/stream` | what every request is doing, once or pushed as server-sent events |

@@ -14,6 +14,13 @@ timeout = 0
 # is valid JSON, but leave this at 0 unless you need it.
 keepalive = 0
 
+[models]
+# What /v1/models offers: one entry per model, at this thinking level where a
+# model comes in low/medium/high, minus the hide list. Everything a backend
+# really has is on /all/v1 (the same endpoints with the full list).
+level = "low"
+hide = ["延伸思考", "gemini-pro-agent"]
+
 [log]
 directory = "./logs"
 # One file per day; older files are deleted. The log never contains prompt or
