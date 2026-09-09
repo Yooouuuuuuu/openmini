@@ -11,19 +11,6 @@ ways to reach Google behind it:
 - **agy** runs the Antigravity CLI itself. Same quota as agyapi, but the CLI cuts messages after 192,000 bytes and
   adds its own prompt on top of yours.
 
-```powershell
-'{"model":"agyapi/gemini-3.1-pro","messages":[{"role":"user","content":"Write a two-sentence story about a cat who learns to sail."}]}' | curl.exe -s http://localhost:18765/v1/chat/completions -H "Content-Type: application/json" -d "@-"
-```
-
-`curl.exe`, not `curl`, which in PowerShell is an alias for `Invoke-WebRequest`. The JSON is piped in because
-PowerShell rewrites quotes inside an argument, which leaves the body as `{model:...}`. If a non-ASCII reply prints
-as mojibake, run `[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)` first.
-
-Any OpenAI-compatible client works: base URL `http://localhost:18765/v1`, any API key until you set one. The model
-name picks the backend: `web/3.1 Pro`, `agyapi/gemini-3.1-pro`, `agyapi/claude-sonnet-4-6`,
-`agy/gemini-3.6-flash`. In the Gemini app, extended thinking (延伸思考) is a switch on top of Pro: `web/3.1 Pro`
-runs plain Pro with the switch off, `web/延伸思考` turns it on. A bare name that exists in exactly one backend goes there; anything else goes to
-`default_backend`. `GET /v1/models` lists them all. Add `"stream": true` for streaming.
 
 ## Get it (Windows)
 
@@ -39,10 +26,19 @@ runs plain Pro with the switch off, `web/延伸思考` turns it on. A bare name 
 3. From then on, double-clicking `openmini.exe` (or the shortcut) starts the server. Windows Firewall asks once;
    allow it if other devices should reach it. The dashboard is at <http://localhost:18765/usage>, the API at
    `http://localhost:18765/v1`.
+4. To try it yourself, in PowerShell:
+```powershell
+'{"model":"agyapi/gemini-3.1-pro","messages":[{"role":"user","content":"Write a two-sentence story about a cat who learns to sail."}]}' | curl.exe -s http://localhost:18765/v1/chat/completions -H "Content-Type: application/json" -d "@-"
+```
 
+   `curl.exe`, not `curl`, which in PowerShell is an alias for `Invoke-WebRequest`. The JSON is piped in because
+   PowerShell rewrites quotes inside an argument, which would leave the body as `{model:...}`.
+
+### Notes
 Windows will say the exe is unrecognised, because it is not code-signed: "More info", then "Run anyway".
 
-Stop it by closing its window, with Ctrl+C, or with `openmini stop` in PowerShell. `openmini doctor` checks
+Stop it by closing its window, by picking Quit from the tray icon, or with `openmini stop` in PowerShell. There is
+no console to press Ctrl+C in unless you start it with `openmini serve --console`. `openmini doctor` checks
 everything, `openmini login` redoes the Gemini sign-in, `openmini setup` runs the wizard again.
 
 You need a Google account with a plan that includes the Gemini app and Antigravity, such as AI Pro. openmini charges
@@ -180,6 +176,12 @@ Asking `/v1` for anything else, say `agyapi/gemini-3.6-flash-high`, is refused w
 it should choose levels itself. `[models]` in the config picks the level that stands for a model (`level = "low"`)
 and the ids or patterns to leave off (`hide`). Ids the Antigravity service has renamed, such as
 `gemini-3.1-pro-high`, are translated on the way in, so old and new names both work.
+
+The prefix picks the backend: `web/3.1 Pro`, `agyapi/gemini-3.1-pro`, `agy/claude-sonnet-4-6`. A bare name that
+exists in exactly one backend goes there; anything else goes to `default_backend`. In the Gemini app, extended
+thinking (延伸思考) is a switch on top of Pro rather than a model: `web/3.1 Pro` runs plain Pro with the switch off,
+`web/延伸思考` turns it on, and it is on `/all/v1` only. Any OpenAI-compatible client works with
+`http://localhost:18765/v1` as the base URL and any API key until you set one; add `"stream": true` to stream.
 
 ## Configuration
 
