@@ -11,9 +11,9 @@ Every `/v1` model took part except gpt-oss; Claude Sonnet and Opus only up to 10
 larger prompts are rerouted to agyapi anyway. Web requests used the paste path up to 100k and the file path
 above it, each in a temporary chat. All requests were streamed.
 
-**What the numbers are.** Each cell is `total (reply start)` in seconds: total is from sending the request to the
-last byte of the reply; reply start is when the first character of the answer arrived. Cycle 1 was recorded to
-the hundredth of a second, the later cycles to the millisecond. Before every request a fixed probe, a 1k prompt
+**What the numbers are.** Each cell is seconds from sending the request to the last byte of the reply, to the
+hundredth of a second. With a one-sentence answer the reply itself takes well under a second on every path, so
+this is the time to get an answer at all. Before every request a fixed probe, a 1k prompt
 on `agyapi/gemini-3.6-flash`, was timed as a gauge of the Antigravity service at that moment; its median and
 tail are given per cycle. A request with nothing back after fifteen minutes would have been recorded as `silent`.
 
@@ -30,19 +30,19 @@ loaded Google is.
 
 | model | 10k | 30k | 100k | 200k | 300k |
 |---|---:|---:|---:|---:|---:|
-| `web/3.5 Flash-Lite` | 6.73 (6.73) | 7.45 (7.45) | 16.60 (16.59) | 10.51 (10.51) | 11.87 (11.87) |
-| `web/3.8 Flash` | 7.34 (7.34) | 8.71 (8.71) | 16.55 (16.55) | 16.01 (16.01) | 21.31 (21.31) |
-| `web/3.1 Pro` | 15.57 (15.56) | 13.66 (13.66) | 24.96 (24.96) | 19.24 (19.24) | 28.21 (28.21) |
-| `agy/gemini-3.8-flash` | 40.81 (40.22) | 4.80 (4.01) | 8.40 (6.37) |  |  |
-| `agy/gemini-3.7-flash` | 3.07 (2.65) | 7.15 (6.76) | 3.93 (3.46) |  |  |
-| `agy/gemini-3.6-flash` | 8.10 (7.43) | 5.30 (4.57) | 7.57 (7.10) |  |  |
-| `agy/gemini-3.1-pro` | 14.19 (13.59) | 8.76 (8.36) | 9.54 (8.02) |  |  |
-| `agy/claude-sonnet-4-6` | 7.51 (5.12) | 16.58 (14.27) | 14.36 (12.75) |  |  |
-| `agy/claude-opus-4-6` | 12.64 (8.68) | 22.88 (20.21) | 8.35 (5.60) |  |  |
-| `agyapi/gemini-3.6-flash` | 1.38 (1.16) | 6.17 (5.43) | 5.49 (5.27) | 5.55 (5.26) | 2.26 (2.22) |
-| `agyapi/gemini-3.1-pro` | 6.54 (5.92) | 8.07 (7.91) | 8.10 (7.38) | 7.31 (6.94) | 6.63 (6.56) |
-| `agyapi/claude-sonnet-4-6` | 2.90 (1.33) | 3.17 (1.27) | 5.24 (1.57) |  |  |
-| `agyapi/claude-opus-4-6` | 5.03 (2.83) | 5.04 (1.94) | 5.60 (2.84) |  |  |
+| `web/3.5 Flash-Lite` | 6.73 | 7.45 | 16.60 | 10.51 | 11.87 |
+| `web/3.8 Flash` | 7.34 | 8.71 | 16.55 | 16.01 | 21.31 |
+| `web/3.1 Pro` | 15.57 | 13.66 | 24.96 | 19.24 | 28.21 |
+| `agy/gemini-3.8-flash` | 40.81 | 4.80 | 8.40 |  |  |
+| `agy/gemini-3.7-flash` | 3.07 | 7.15 | 3.93 |  |  |
+| `agy/gemini-3.6-flash` | 8.10 | 5.30 | 7.57 |  |  |
+| `agy/gemini-3.1-pro` | 14.19 | 8.76 | 9.54 |  |  |
+| `agy/claude-sonnet-4-6` | 7.51 | 16.58 | 14.36 |  |  |
+| `agy/claude-opus-4-6` | 12.64 | 22.88 | 8.35 |  |  |
+| `agyapi/gemini-3.6-flash` | 1.38 | 6.17 | 5.49 | 5.55 | 2.26 |
+| `agyapi/gemini-3.1-pro` | 6.54 | 8.07 | 8.10 | 7.31 | 6.63 |
+| `agyapi/claude-sonnet-4-6` | 2.90 | 3.17 | 5.24 |  |  |
+| `agyapi/claude-opus-4-6` | 5.03 | 5.04 | 5.60 |  |  |
 
 Concurrency, N identical 10k requests at once on `gemini-3.6-flash`; batch wall time, then each request:
 
