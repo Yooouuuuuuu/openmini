@@ -75,7 +75,7 @@ machines. Open it for the tailnet only, in PowerShell run as administrator:
 netsh advfirewall firewall add rule name="openmini" dir=in action=allow protocol=TCP localport=18765 remoteip=100.64.0.0/10
 ```
 
-To close it again:
+To close it:
 
 ```powershell
 netsh advfirewall firewall delete rule name="openmini"
@@ -89,8 +89,9 @@ netsh advfirewall firewall delete rule name="openmini"
   reset times.
 - **Size limits.** The Gemini web prompt box refuses single lines over about 32k characters; pasted prompts arrive
   intact to about 100k characters and larger ones go as a file. agy drops everything after the first 192,000 bytes
-  of a message. `oversize_action` says what openmini does with a prompt that would be cut: reroute to agyapi (the
-  default), report, or refuse.
+  of a message. `oversize_action` says what openmini does with an agy prompt that would be cut: `agyapi` reroutes it to
+  agyapi (the default), `web` sends it to the web backend as a file, `warn` lets agy cut it and notes that, `fail`
+  refuses it.
 - **Temporary chats.** Every web request starts as a Gemini temporary chat, so nothing openmini sends is kept in
   the account's history or used as context for later chats. `temporary_chat = false` in `[web]` turns that off.
 - **Latency.** Measured across a day for every model and prompt sizes up to 300k characters: see
@@ -131,7 +132,7 @@ If you would rather have openmini give up by itself, two settings in `config.tom
 
 ## Other platforms
 
-Linux, WSL and macOS build from source with Go 1.22 and are otherwise the same server:
+Linux, WSL and macOS:
 
 ```bash
 go build -o openmini . && ./openmini setup
