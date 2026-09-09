@@ -91,8 +91,6 @@ netsh advfirewall firewall delete rule name="openmini"
   refuses it.
 - **Temporary chats.** Every web request starts as a Gemini temporary chat, so nothing openmini sends is kept in
   the account's history or used as context for later chats. `temporary_chat = false` in `[web]` turns that off.
-- **Latency.** Measured across a day for every model and prompt sizes up to 300k characters: see
-  [LATENCY.md](LATENCY.md).
 - **History.** `[history] enabled = true` writes one JSON file per request to `data/history`, named
   `<time>_<backend>_<model>_<id>.json`: the request body exactly as received under `request`, the completion
   exactly as returned under `response`, and openmini's notes (timings, phase, reroute) under `openmini`. Off by
@@ -108,14 +106,10 @@ netsh advfirewall firewall delete rule name="openmini"
 
 ## If the web backend seems stuck
 
-Nothing times out by default. On a long prompt at a busy hour the Gemini app can think for many minutes before
-the first word, and openmini waits; the request block on the dashboard shows what it is doing (thinking, generating,
-how long). If a request should not continue, press its **Stop** button. If the page itself looks wrong, `POST
-/web/reload` reloads the Gemini tab; the next request also reloads a tab that looks wrong on its own.
-
-If you would rather have openmini give up by itself, two settings in `config.toml`, both in seconds and both
-`0` for no limit: `start_timeout` under `[web]` (how long to wait for a reply to open) and `timeout` under
-`[server]` (how long to wait for the whole reply). What actually happened is in `logs\<date>.log`.
+Nothing times out by default, so on a long prompt at a busy hour the Gemini app may think for minutes before the
+first word and openmini waits. The dashboard shows what a request is doing; press its **Stop** button to end one.
+To make openmini give up on its own, set `start_timeout` (`[web]`) or `timeout` (`[server]`) in `config.toml`, in
+seconds, `0` meaning no limit.
 
 ## Security
 
@@ -155,28 +149,18 @@ window or tray icon outside Windows: the server stays in the terminal.
 | `POST /requests/stop?id=` | cancel a running request |
 | `POST /shutdown` | stop the server; accepted only from the same machine (`openmini stop`) |
 | `GET /health` | backend readiness |
-| `GET /debug/web/html`, `GET /debug/web/screenshot` | the live Gemini page, for fixing selectors |
-| `GET /debug/agyapi/quota` (`?method=retrieveUserQuotaSummary`) | the raw quota response from the Antigravity service |
-| `POST /tools/policy-bisect?last=1` | find which part of the last prompt Google's content policy rejects |
 
-### Model names on `/v1` and `/all/v1`
+### Model names
 
-`/v1` is the short list a client should see: one entry per model, named by family. Where a model comes in
-thinking levels, the low one stands for it and the suffix is dropped, so `agy/gemini-3.8-flash-low` is listed and
-requested as `agy/gemini-3.8-flash`, and `agy/claude-opus-4-6-thinking` as `agy/claude-opus-4-6`. The full id of the
-chosen level is accepted on `/v1` too. The web app's extended-thinking switch and `gemini-pro-agent` are left off.
-Asking `/v1` for anything else, say `agyapi/gemini-3.6-flash-high`, is refused with a message pointing at `/all/v1`.
+A model is `<backend>/<name>`, for example `web/3.1 Pro` or `agyapi/gemini-3.1-pro`. `GET /v1/models` lists what is
+on offer; a bare name that exists in only one backend also works, otherwise it goes to `default_backend`.
 
-`/all/v1` is the whole list under the backends' own names, nothing hidden or renamed. Point a client there when
-it should choose levels itself. `[models]` in the config picks the level that stands for a model (`level = "low"`)
-and the ids or patterns to leave off (`hide`). Ids the Antigravity service has renamed, such as
-`gemini-3.1-pro-high`, are translated on the way in, so old and new names both work.
-
-The prefix picks the backend: `web/3.1 Pro`, `agyapi/gemini-3.1-pro`, `agy/claude-sonnet-4-6`. A bare name that
-exists in exactly one backend goes there; anything else goes to `default_backend`. In the Gemini app, extended
-thinking (延伸思考) is a switch on top of Pro rather than a model: `web/3.1 Pro` runs plain Pro with the switch off,
-`web/延伸思考` turns it on, and it is on `/all/v1` only. Any OpenAI-compatible client works with
-`http://localhost:18765/v1` as the base URL and any API key until you set one; add `"stream": true` to stream.
+- **`/v1` shows one name per model.** Where a model comes in thinking levels, the low one stands for it and the
+  suffix is dropped: `gemini-3.8-flash` means `gemini-3.8-flash-low`, `claude-opus-4-6` means the thinking variant.
+- **`/all/v1` shows every model** under the backend's own name, levels and all. Use it to pick a level yourself;
+  `[models]` in the config sets which level `/v1` shows and what to hide.
+- **Extended thinking** (延伸思考) is a Gemini switch, not a model: `web/3.1 Pro` is plain Pro, `web/延伸思考` turns it
+  on, and it appears on `/all/v1` only.
 
 ## Configuration
 
@@ -186,8 +170,7 @@ explain every setting. The ones people change: `port`, `default_backend`, `api_k
 
 ## Development
 
-`assets/icon.svg` is the icon; `winres/` and `rsrc_windows_amd64.syso` embed it in the Windows exe (regenerate with
-`go-winres make --in winres/winres.json --out rsrc`). `scripts/` holds two test scripts used during development.
-Build the Windows exe from anywhere with `GOOS=windows GOARCH=amd64 go build -o dist/openmini.exe .`
+Build the Windows exe from any platform: `GOOS=windows GOARCH=amd64 go build -o dist/openmini.exe .`
 
-MIT licensed.
+openmini has run stably across a full day at every model and prompt sizes up to 300k characters; the readings are
+in [LATENCY.md](LATENCY.md). MIT licensed.
