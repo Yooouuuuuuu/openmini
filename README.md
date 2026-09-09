@@ -99,6 +99,8 @@ netsh advfirewall firewall delete rule name="openmini"
   default), report, or refuse.
 - **Temporary chats.** Every web request starts as a Gemini temporary chat, so nothing openmini sends is kept in
   the account's history or used as context for later chats. `temporary_chat = false` in `[web]` turns that off.
+- **Latency.** Measured across a day for every model and prompt sizes up to 300k characters: see
+  [LATENCY.md](LATENCY.md).
 - **History.** `[history] enabled = true` writes one JSON file per request to `data/history`, named
   `<time>_<backend>_<model>_<id>.json`: the request body exactly as received under `request`, the completion
   exactly as returned under `response`, and openmini's notes (timings, phase, reroute) under `openmini`. Off by
