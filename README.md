@@ -52,6 +52,10 @@ button hides it to the notification area (click the tray icon to bring it back, 
 close button stops openmini. Nothing runs in the terminal you started it from, which can be closed. `openmini serve
 --console` keeps the old behaviour of staying in the terminal.
 
+**Updating.** Download the new zip, stop openmini (close its window), replace `openmini.exe` with the new one and
+start it again. `config.toml` and the `data` folder (your Gemini sign-in, agy's state, history) stay as they are;
+`config.example.toml` in the zip shows any new settings, which all have working defaults when absent.
+
 ## The dashboard
 
 ![openmini dashboard](assets/dashboard.png)
