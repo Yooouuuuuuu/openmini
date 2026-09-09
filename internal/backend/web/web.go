@@ -833,9 +833,9 @@ func (w *Web) newChat(c backend.Call) error {
 	return nil
 }
 
-// startTemporaryChat presses the temporary-chat toggle on the fresh chat and
-// reports what the page did, so a changed UI shows up in the log rather
-// than as silently saved chats.
+// startTemporaryChat presses the temporary-chat toggle on the fresh chat.
+// Nothing about the page is logged: the sidebar next to the toggle lists
+// the account's chats, and the log carries no content.
 func (w *Web) startTemporaryChat(ctx context.Context) error {
 	// The toggle renders a moment after the prompt box, like the model
 	// picker: wait for it while the page is alive. Two minutes without it
@@ -861,13 +861,6 @@ func (w *Web) startTemporaryChat(ctx context.Context) error {
 		return fmt.Errorf("temporary chat: %v", err)
 	}
 	time.Sleep(1200 * time.Millisecond)
-	state, _ := w.page.Evaluate(`() => {
-		const b = document.querySelector("temp-chat-button button");
-		const cls = b ? (b.className + " " + (b.parentElement ? b.parentElement.className : "")) : "";
-		const main = document.querySelector("main, .chat-container, chat-window") || document.body;
-		return {url: location.href, pressed: b ? (b.getAttribute("aria-pressed") || "") : "", selected: /selected|active|pressed|checked/i.test(cls), text: (main.innerText || "").replace(/\s+/g, " ").slice(0, 160)};
-	}`, nil)
-	w.logf("web: temporary chat toggled: %v", state)
 	if !w.exists(w.page.Locator(promptBoxSel)) {
 		return fmt.Errorf("temporary chat: the prompt box vanished after the toggle")
 	}
