@@ -270,32 +270,33 @@ func (s *Server) handleStatus(c *fiber.Ctx) error {
 // "web/3.1 Pro" and "agy/gemini-3.1-pro-low" are explicit; a bare name that
 // matches exactly one backend's list routes there; anything else goes to the
 // default backend as its default model.
-func (s *Server) resolve(name string) (backend.Backend, string, error) {
+func (s *Server) resolve(name string, all bool) (backend.Backend, string, error) {
 	name = strings.TrimSpace(name)
 	if i := strings.IndexByte(name, '/'); i > 0 {
 		if b, ok := s.backends[name[:i]]; ok {
 			m := strings.TrimSpace(name[i+1:])
-			if m == "default" {
-				m = ""
+			if m == "default" || m == "" {
+				return b, "", nil
 			}
-			return b, m, nil
+			id, err := s.lookup(b, m, all)
+			return b, id, err
 		}
 		return nil, "", fmt.Errorf("unknown backend prefix %q", name[:i])
 	}
 	var match backend.Backend
+	var matchID string
 	for _, b := range s.backends {
-		for _, m := range b.Models() {
-			if strings.EqualFold(m, name) {
-				if match != nil && match != b {
-					match = nil
-					break
-				}
-				match = b
+		_, real := s.offered(b, all)
+		if id, ok := real[strings.ToLower(name)]; ok {
+			if match != nil && match != b {
+				match = nil
+				break
 			}
+			match, matchID = b, id
 		}
 	}
 	if match != nil {
-		return match, name, nil
+		return match, matchID, nil
 	}
 	b, ok := s.backends[s.cfg.Server.DefaultBackend]
 	if !ok {
@@ -316,7 +317,7 @@ func (s *Server) all(h fiber.Handler) fiber.Handler {
 // gemini-3.6-flash-low are one model with two levels.
 func family(id string) (base, level string) {
 	low := strings.ToLower(id)
-	for _, l := range []string{"-low", "-medium", "-high"} {
+	for _, l := range []string{"-low", "-medium", "-high", "-thinking"} {
 		if strings.HasSuffix(low, l) {
 			return id[:len(id)-len(l)], l[1:]
 		}
@@ -340,7 +341,7 @@ func (s *Server) curated(ids []string) []string {
 		return false
 	}
 	rank := func(level string) int {
-		order := []string{s.cfg.Models.Level, "low", "medium", "high", ""}
+		order := []string{s.cfg.Models.Level, "low", "medium", "high", "", "thinking"}
 		for i, l := range order {
 			if l == level {
 				return i
@@ -372,25 +373,47 @@ func (s *Server) curated(ids []string) []string {
 	return out
 }
 
-// onCurated reports whether a model a backend knows is offered on /v1. Ids
-// the backend does not list at all are left to the backend to judge.
-func (s *Server) onCurated(b backend.Backend, model string) bool {
+// offered is what a base URL lists for a backend and what each name stands
+// for. On /all/v1 that is every id as the backend names it. On /v1 it is the
+// curated set under family names (gemini-3.8-flash for gemini-3.8-flash-low,
+// claude-opus-4-6 for the -thinking variant); the full curated id is
+// accepted there too.
+func (s *Server) offered(b backend.Backend, all bool) (names []string, real map[string]string) {
+	real = map[string]string{}
+	if all {
+		for _, id := range b.Models() {
+			names = append(names, id)
+			real[strings.ToLower(id)] = id
+		}
+		return
+	}
+	for _, id := range s.curated(b.Models()) {
+		short, _ := family(id)
+		names = append(names, short)
+		real[strings.ToLower(short)] = id
+		real[strings.ToLower(id)] = id
+	}
+	return
+}
+
+// lookup maps a requested name to a backend's real id on the given base
+// URL. Unknown names on /all/v1 pass through for the backend to judge; on
+// /v1 they are refused with a pointer to /all/v1.
+func (s *Server) lookup(b backend.Backend, name string, all bool) (string, error) {
+	_, real := s.offered(b, all)
+	if id, ok := real[strings.ToLower(name)]; ok {
+		return id, nil
+	}
 	known := false
 	for _, m := range b.Models() {
-		if strings.EqualFold(m, model) {
+		if strings.EqualFold(m, name) {
 			known = true
-			break
 		}
 	}
-	if !known {
-		return true
+	if all || !known {
+		return name, nil
 	}
-	for _, m := range s.curated(b.Models()) {
-		if strings.EqualFold(m, model) {
-			return true
-		}
-	}
-	return false
+	return "", fmt.Errorf("model %q is not offered on /v1; the same request works on /all/v1", b.Name()+"/"+name)
 }
 
 // probeModel is the cheap model the policy-bisect tool probes with: the
@@ -423,10 +446,7 @@ func (s *Server) handleModels(c *fiber.Ctx) error {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		ids := s.backends[n].Models()
-		if c.Locals("all") != true {
-			ids = s.curated(ids)
-		}
+		ids, _ := s.offered(s.backends[n], c.Locals("all") == true)
 		for _, m := range ids {
 			data = append(data, fiber.Map{"id": n + "/" + m, "object": "model", "created": s.started.Unix(), "owned_by": "openmini"})
 		}
@@ -661,13 +681,9 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 		s.recent = s.recent[:5]
 	}
 	s.recentMu.Unlock()
-	b, model, err := s.resolve(req.Model)
+	b, model, err := s.resolve(req.Model, c.Locals("all") == true)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": fiber.Map{"message": err.Error(), "type": "invalid_request_error"}})
-	}
-	if c.Locals("all") != true && model != "" && !s.onCurated(b, model) {
-		msg := fmt.Sprintf("model %q is not offered on /v1; the same request works on /all/v1", req.Model)
-		return c.Status(400).JSON(fiber.Map{"error": fiber.Map{"message": msg, "type": "invalid_request_error"}})
 	}
 	id := newID()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -928,7 +944,7 @@ func (s *Server) handlePolicyBisect(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 	}
-	b, model, err := s.resolve(req.Model)
+	b, model, err := s.resolve(req.Model, true) // the tool takes any id a backend has
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 	}

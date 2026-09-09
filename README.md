@@ -143,8 +143,8 @@ The Gemini sign-in needs a screen once (WSL needs WSLg); on a headless server, s
 | Endpoint | Purpose |
 |---|---|
 | `POST /v1/chat/completions` | OpenAI chat completions, streaming or not |
-| `GET /v1/models` | one entry per model of every enabled backend, prefixed: the low thinking level where a model comes in low/medium/high, minus `[models] hide` |
-| `GET /all/v1/models`, `POST /all/v1/chat/completions` | the same endpoints with every model a backend has, nothing hidden |
+| `GET /v1/models` | one entry per model of every enabled backend, under its family name (see below) |
+| `GET /all/v1/models`, `POST /all/v1/chat/completions` | the same endpoints with every model a backend has, under the backend's own names |
 | `GET /usage` | the dashboard (`/` redirects here) |
 | `GET /usage/cached`, `POST /usage/refresh?backend=` | the cache behind it; a refresh asks one backend |
 | `GET /status` (`?format=text`), `GET /status/stream` | what every request is doing, once or pushed as server-sent events |
@@ -154,6 +154,19 @@ The Gemini sign-in needs a screen once (WSL needs WSLg); on a headless server, s
 | `GET /debug/web/html`, `GET /debug/web/screenshot` | the live Gemini page, for fixing selectors |
 | `GET /debug/agyapi/quota` (`?method=retrieveUserQuotaSummary`) | the raw quota response from the Antigravity service |
 | `POST /tools/policy-bisect?last=1` | find which part of the last prompt Google's content policy rejects |
+
+### Model names on `/v1` and `/all/v1`
+
+`/v1` is the short list a client should see: one entry per model, named by family. Where a model comes in
+thinking levels, the low one stands for it and the suffix is dropped, so `agy/gemini-3.8-flash-low` is listed and
+requested as `agy/gemini-3.8-flash`, and `agy/claude-opus-4-6-thinking` as `agy/claude-opus-4-6`. The full id of the
+chosen level is accepted on `/v1` too. The web app's extended-thinking switch and `gemini-pro-agent` are left off.
+Asking `/v1` for anything else, say `agyapi/gemini-3.6-flash-high`, is refused with a message pointing at `/all/v1`.
+
+`/all/v1` is the whole list under the backends' own names, nothing hidden or renamed. Point a client there when
+it should choose levels itself. `[models]` in the config picks the level that stands for a model (`level = "low"`)
+and the ids or patterns to leave off (`hide`). Ids the Antigravity service has renamed, such as
+`gemini-3.1-pro-high`, are translated on the way in, so old and new names both work.
 
 ## Configuration
 
