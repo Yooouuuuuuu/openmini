@@ -3,6 +3,7 @@ package main
 
 import (
 	"openmini/internal/proc"
+	"time"
 
 	"bufio"
 	"fmt"
@@ -59,8 +60,13 @@ func main() {
 				exe, _ := os.Executable()
 				serve := exec.Command(exe, "serve")
 				serve.Stdin, serve.Stdout, serve.Stderr = os.Stdin, os.Stdout, os.Stderr
+				t0 := time.Now()
 				serve.Run()
-				fmt.Println("\nopenmini has stopped.")
+				if time.Since(t0) < 10*time.Second {
+					fmt.Println("\nopenmini is running in its own window. This window can be closed.")
+				} else {
+					fmt.Println("\nopenmini has stopped.")
+				}
 			} else {
 				fmt.Println("\nSetup is finished. Double-click openmini.exe whenever you want to start openmini.")
 			}
