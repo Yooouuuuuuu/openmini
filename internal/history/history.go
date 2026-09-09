@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type Store struct{ dir string }
@@ -65,6 +66,16 @@ func safe(s string) string {
 // Write stores the file, replacing any earlier version, through a temporary
 // name so a reader never sees a half-written file.
 func (s *Store) Write(name string, request []byte, response any, meta Meta) error {
+	// A client can send a body that is syntactically valid JSON but not valid
+	// UTF-8 (Windows PowerShell does this with non-ASCII text unless the body
+	// is sent as UTF-8 bytes). Storing those bytes verbatim would leave a file
+	// no JSON reader accepts, so they are repaired and the repair is noted.
+	if !utf8.Valid(request) {
+		request = []byte(strings.ToValidUTF8(string(request), "\uFFFD"))
+		if meta != nil {
+			meta["request_encoding"] = "the client's body was not valid UTF-8; invalid bytes replaced"
+		}
+	}
 	raw := json.RawMessage(request)
 	if !json.Valid(request) {
 		raw, _ = json.Marshal(string(request)) // not JSON: keep it as a string

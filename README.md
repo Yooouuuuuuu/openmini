@@ -11,16 +11,17 @@ ways to reach Google behind it:
 - **agy** runs the Antigravity CLI itself. Same quota as agyapi, but the CLI cuts messages after 192,000 bytes and
   adds its own prompt on top of yours.
 
-```bash
-curl http://localhost:18765/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model": "agyapi/gemini-3.1-pro-low",
-       "messages": [{"role": "user", "content": "Write a two-sentence story about a cat who learns to sail."}]}'
+```powershell
+'{"model":"agyapi/gemini-3.1-pro","messages":[{"role":"user","content":"Write a two-sentence story about a cat who learns to sail."}]}' | curl.exe -s http://localhost:18765/v1/chat/completions -H "Content-Type: application/json" -d "@-"
 ```
 
+`curl.exe`, not `curl`, which in PowerShell is an alias for `Invoke-WebRequest`. The JSON is piped in because
+PowerShell rewrites quotes inside an argument, which leaves the body as `{model:...}`. If a non-ASCII reply prints
+as mojibake, run `[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)` first.
+
 Any OpenAI-compatible client works: base URL `http://localhost:18765/v1`, any API key until you set one. The model
-name picks the backend: `web/3.1 Pro`, `agyapi/gemini-3.1-pro-low`, `agyapi/claude-sonnet-4-6`,
-`agy/gemini-3.6-flash-low`. In the Gemini app, extended thinking (延伸思考) is a switch on top of Pro: `web/3.1 Pro`
+name picks the backend: `web/3.1 Pro`, `agyapi/gemini-3.1-pro`, `agyapi/claude-sonnet-4-6`,
+`agy/gemini-3.6-flash`. In the Gemini app, extended thinking (延伸思考) is a switch on top of Pro: `web/3.1 Pro`
 runs plain Pro with the switch off, `web/延伸思考` turns it on. A bare name that exists in exactly one backend goes there; anything else goes to
 `default_backend`. `GET /v1/models` lists them all. Add `"stream": true` for streaming.
 
@@ -137,16 +138,18 @@ If you would rather have openmini give up by itself, two settings in `config.tom
 
 ## Other platforms
 
-Linux, WSL and macOS build from source with Go 1.22:
+Linux, WSL and macOS build from source with Go 1.22 and are otherwise the same server:
 
 ```bash
-go build -o openmini .
-./openmini setup      # or ./run.sh, which also needs tmux
+go build -o openmini . && ./openmini setup
+curl -s localhost:18765/v1/chat/completions -H "Content-Type: application/json" \
+  -d '{"model":"agyapi/gemini-3.1-pro","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-The Gemini sign-in needs a screen once (WSL needs WSLg); on a headless server, sign in on a PC and copy
+The Gemini sign-in needs a screen once (WSL needs WSLg); on a headless server, sign in elsewhere and copy
 `data/browser-profile` over. Install agy with `curl -fsSL https://antigravity.google/cli/install.sh | bash` and run
-`agy` once; over SSH it prints a URL and takes a code back. agyapi reads agy's token file there.
+`agy` once; over SSH it prints a URL and takes a code back. agyapi reads agy's token file there. There is no
+window or tray icon outside Windows: the server stays in the terminal.
 
 ## Endpoints
 
