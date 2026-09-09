@@ -31,9 +31,6 @@ ways to reach Google behind it:
 '{"model":"agyapi/gemini-3.1-pro","messages":[{"role":"user","content":"Write a two-sentence story about a cat who learns to sail."}]}' | curl.exe -s http://localhost:18765/v1/chat/completions -H "Content-Type: application/json" -d "@-"
 ```
 
-   `curl.exe`, not `curl`, which in PowerShell is an alias for `Invoke-WebRequest`. The JSON is piped in because
-   PowerShell rewrites quotes inside an argument, which would leave the body as `{model:...}`.
-
 ### Notes
 Windows will say the exe is unrecognised, because it is not code-signed: "More info", then "Run anyway".
 
