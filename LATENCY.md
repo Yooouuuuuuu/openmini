@@ -2,7 +2,7 @@
 
 Measured on 2026-09-09/10 with openmini 0.4.0 on a Windows 11 desktop, all three backends, one Google AI Pro
 account. The point was Google's variance over the day rather than statistics of one moment, so the whole grid runs
-once per cycle and the cycles are six hours apart: about 14:00, 20:00, 02:00 and 08:00 local time (UTC+8).
+once per cycle and the cycles are six hours apart, at about 08:00, 14:00, 20:00 and 02:00 local time (UTC+8).
 
 **What was sent.** Five prompt sizes, 10k, 30k, 100k, 200k and 300k characters of English prose and source
 code, identical for every model and cycle at a given size, each ending with "Summarize the material above in one
@@ -24,25 +24,29 @@ loaded Google is.
 
 ## Results
 
-### Cycle 1, about 14:00 (ran 13:53 to 13:59)
+### About 08:00
+
+Not run yet.
+
+### About 14:00
 
 49 requests; 49 ok. Probe before each request: median 1.78 s, 90th percentile 5.52 s, slowest 14.71 s.
 
 | model | 10k | 30k | 100k | 200k | 300k |
 |---|---:|---:|---:|---:|---:|
-| `web/3.5 Flash-Lite` | 6.73 | 7.45 | 16.60 | 10.51 | 11.87 |
-| `web/3.8 Flash` | 7.34 | 8.71 | 16.55 | 16.01 | 21.31 |
-| `web/3.1 Pro` | 15.57 | 13.66 | 24.96 | 19.24 | 28.21 |
-| `agy/gemini-3.8-flash` | 40.81 | 4.80 | 8.40 |  |  |
-| `agy/gemini-3.7-flash` | 3.07 | 7.15 | 3.93 |  |  |
-| `agy/gemini-3.6-flash` | 8.10 | 5.30 | 7.57 |  |  |
-| `agy/gemini-3.1-pro` | 14.19 | 8.76 | 9.54 |  |  |
-| `agy/claude-sonnet-4-6` | 7.51 | 16.58 | 14.36 |  |  |
-| `agy/claude-opus-4-6` | 12.64 | 22.88 | 8.35 |  |  |
-| `agyapi/gemini-3.6-flash` | 1.38 | 6.17 | 5.49 | 5.55 | 2.26 |
-| `agyapi/gemini-3.1-pro` | 6.54 | 8.07 | 8.10 | 7.31 | 6.63 |
-| `agyapi/claude-sonnet-4-6` | 2.90 | 3.17 | 5.24 |  |  |
-| `agyapi/claude-opus-4-6` | 5.03 | 5.04 | 5.60 |  |  |
+| `web/3.5 Flash-Lite` | 6.73 s | 7.45 s | 16.60 s | 10.51 s | 11.87 s |
+| `web/3.8 Flash` | 7.34 s | 8.71 s | 16.55 s | 16.01 s | 21.31 s |
+| `web/3.1 Pro` | 15.57 s | 13.66 s | 24.96 s | 19.24 s | 28.21 s |
+| `agy/gemini-3.8-flash` | 40.81 s | 4.80 s | 8.40 s |  |  |
+| `agy/gemini-3.7-flash` | 3.07 s | 7.15 s | 3.93 s |  |  |
+| `agy/gemini-3.6-flash` | 8.10 s | 5.30 s | 7.57 s |  |  |
+| `agy/gemini-3.1-pro` | 14.19 s | 8.76 s | 9.54 s |  |  |
+| `agy/claude-sonnet-4-6` | 7.51 s | 16.58 s | 14.36 s |  |  |
+| `agy/claude-opus-4-6` | 12.64 s | 22.88 s | 8.35 s |  |  |
+| `agyapi/gemini-3.6-flash` | 1.38 s | 6.17 s | 5.49 s | 5.55 s | 2.26 s |
+| `agyapi/gemini-3.1-pro` | 6.54 s | 8.07 s | 8.10 s | 7.31 s | 6.63 s |
+| `agyapi/claude-sonnet-4-6` | 2.90 s | 3.17 s | 5.24 s |  |  |
+| `agyapi/claude-opus-4-6` | 5.03 s | 5.04 s | 5.60 s |  |  |
 
 Concurrency, N identical 10k requests at once on `gemini-3.6-flash`; batch wall time, then each request:
 
@@ -57,21 +61,17 @@ Concurrency, N identical 10k requests at once on `gemini-3.6-flash`; batch wall 
 | agy | 4 | 33.44 s | 6.69, 19.32, 24.06, 33.43 |
 | agy | 8 | 51.26 s | 4.39, 8.19, 13.85, 25.47, 31.41, 37.23, 42.49, 51.26 |
 
-### Cycle 2, about 20:00
+### About 20:00
 
 Not run yet.
 
-### Cycle 3, about 02:00
-
-Not run yet.
-
-### Cycle 4, about 08:00
+### About 02:00
 
 Not run yet.
 
 ## Reading them
 
-- **Size hardly matters when Google is quick.** In cycle 1 agyapi answered a 300k prompt in the same few seconds
+- **Size hardly matters when Google is quick.** At 14:00 agyapi answered a 300k prompt in the same few seconds
   as a 10k one, and the web file path at 200k and 300k was as fast as pasting 30k.
 - **agyapi is the fastest path**; agy adds a steady overhead on top of the same service, plus a cold start on its
   first call.
