@@ -10,13 +10,21 @@ import (
 )
 
 type Config struct {
-	Server Server `toml:"server"`
-	Log    Log    `toml:"log"`
-	Prompt Prompt `toml:"prompt"`
-	Web    Web    `toml:"web"`
-	Agy    Agy    `toml:"agy"`
-	AgyAPI AgyAPI `toml:"agyapi"`
-	Models Models `toml:"models"`
+	Server  Server  `toml:"server"`
+	Log     Log     `toml:"log"`
+	Prompt  Prompt  `toml:"prompt"`
+	Web     Web     `toml:"web"`
+	Agy     Agy     `toml:"agy"`
+	AgyAPI  AgyAPI  `toml:"agyapi"`
+	Models  Models  `toml:"models"`
+	History History `toml:"history"`
+}
+
+// History keeps one JSON file per request: the request body as received,
+// the completion as returned, and openmini's notes.
+type History struct {
+	Enabled   bool   `toml:"enabled"`
+	Directory string `toml:"directory"`
 }
 
 // Models says what /v1/models offers; /all/v1 always has everything.
@@ -119,6 +127,9 @@ func (c *Config) applyDefaults() {
 	if c.Log.Directory == "" {
 		c.Log.Directory = "./logs"
 	}
+	if c.History.Directory == "" {
+		c.History.Directory = "./data/history"
+	}
 	if c.Log.KeepDays <= 0 {
 		c.Log.KeepDays = 7
 	}
@@ -219,6 +230,15 @@ directory = "./logs"
 # One file per day; older files are deleted. The log never contains prompt or
 # reply text, only ids, sizes, timings and status.
 keep_days = 7
+
+[history]
+# Off by default. When on, every request becomes one JSON file in the
+# directory, named <time>_<backend>_<model>_<id>.json, holding the request
+# body exactly as received ("request"), the completion exactly as returned
+# ("response") and openmini's notes ("openmini"). Prompts and replies are on
+# disk then: keep the folder private.
+enabled = false
+directory = "./data/history"
 
 [prompt]
 # "direct": message contents are sent in order, unchanged, joined by blank

@@ -27,6 +27,15 @@ directory = "./logs"
 # reply text, only ids, sizes, timings and status.
 keep_days = 7
 
+[history]
+# Off by default. When on, every request becomes one JSON file in the
+# directory, named <time>_<backend>_<model>_<id>.json, holding the request
+# body exactly as received ("request"), the completion exactly as returned
+# ("response") and openmini's notes ("openmini"). Prompts and replies are on
+# disk then: keep the folder private.
+enabled = false
+directory = "./data/history"
+
 [prompt]
 # "direct": message contents are sent in order, unchanged, joined by blank
 # lines. "structured": role labels and an Instructions block are added.

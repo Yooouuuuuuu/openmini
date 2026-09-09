@@ -95,6 +95,10 @@ netsh advfirewall firewall delete rule name="openmini"
   default), report, or refuse.
 - **Temporary chats.** Every web request starts as a Gemini temporary chat, so nothing openmini sends is kept in
   the account's history or used as context for later chats. `temporary_chat = false` in `[web]` turns that off.
+- **History.** `[history] enabled = true` writes one JSON file per request to `data/history`, named
+  `<time>_<backend>_<model>_<id>.json`: the request body exactly as received under `request`, the completion
+  exactly as returned under `response`, and openmini's notes (timings, phase, reroute) under `openmini`. Off by
+  default; when on, prompts and replies are on disk, so keep the folder private.
 - **Lanes.** The web backend answers one request at a time by default. `lanes = 2` (or 3) in `[web]` opens that
   many chat tabs in the same browser so requests overlap; each tab costs memory and the account's quota is spent
   faster. agy and agyapi already run requests in parallel.

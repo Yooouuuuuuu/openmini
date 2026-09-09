@@ -23,6 +23,7 @@ import (
 	"openmini/internal/backend/agy"
 	"openmini/internal/backend/web"
 	"openmini/internal/config"
+	"openmini/internal/history"
 	"openmini/internal/logging"
 	"openmini/internal/state"
 )
@@ -48,11 +49,22 @@ type Server struct {
 	backends   map[string]backend.Backend
 	webDebug   *web.Web
 	started    time.Time
-	OnStop     func() // asked to shut down by POST /shutdown from this machine
+	OnStop     func()         // asked to shut down by POST /shutdown from this machine
+	hist       *history.Store // one file per request, when [history] is on
 }
 
 func New(cfg *config.Config, log *logging.Logger, backends map[string]backend.Backend, webDebug *web.Web) *Server {
-	return &Server{cfg: cfg, log: log, st: state.New(), backends: backends, webDebug: webDebug, started: time.Now(), usageCache: map[string]usageEntry{}}
+	var hist *history.Store
+	if cfg.History.Enabled {
+		h, err := history.New(cfg.History.Directory)
+		if err != nil {
+			log.Printf("history: %v (not recording)", err)
+		} else {
+			hist = h
+			log.Printf("history: writing one file per request to %s", cfg.History.Directory)
+		}
+	}
+	return &Server{hist: hist, cfg: cfg, log: log, st: state.New(), backends: backends, webDebug: webDebug, started: time.Now(), usageCache: map[string]usageEntry{}}
 }
 
 func (s *Server) Listen() error {
@@ -668,6 +680,7 @@ func usageMap(u map[string]int, prompt, reply string) fiber.Map {
 
 func (s *Server) handleChat(c *fiber.Ctx) error {
 	var req chatRequest
+	rawBody := append([]byte(nil), c.Body()...) // kept verbatim for the history file
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": fiber.Map{"message": "invalid JSON body: " + err.Error(), "type": "invalid_request_error"}})
 	}
@@ -703,7 +716,8 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 		s.log.Printf("%s client went away; stopping", id)
 		cancel()
 	}
-	created := time.Now().Unix()
+	startedAt := time.Now()
+	created := startedAt.Unix()
 	shown := req.Model
 	if shown == "" {
 		shown = b.Name() + "/default"
@@ -726,6 +740,31 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 	}
 	s.log.Printf("%s %s model=%q stream=%v prompt=%d chars", id, b.Name(), model, req.Stream, backend.Chars(full))
 	c.Set("X-Openmini-Request-Id", id)
+
+	body := func(res backend.Result, reply string) fiber.Map {
+		return fiber.Map{
+			"id": id, "object": "chat.completion", "created": created, "model": shown,
+			"choices": []fiber.Map{{"index": 0, "message": fiber.Map{"role": "assistant", "content": reply}, "finish_reason": "stop"}},
+			"usage":   usageMap(res.Usage, full, reply),
+		}
+	}
+	// the history file: written now with the request, rewritten when done
+	histName := ""
+	histMeta := history.Meta{}
+	if s.hist != nil {
+		histName = history.Name(startedAt, b.Name(), model, id)
+		histMeta = history.Meta{"id": id, "backend": b.Name(), "model": model, "requested": req.Model, "stream": req.Stream,
+			"started": startedAt.Format(time.RFC3339), "phase": "running"}
+		if model == "" {
+			histMeta["model"] = "default"
+		}
+		if rerouted != "" {
+			histMeta["rerouted"] = rerouted
+		}
+		if err := s.hist.Write(histName, rawBody, nil, histMeta); err != nil {
+			s.log.Printf("%s history: %v", id, err)
+		}
+	}
 
 	call := backend.Call{ID: id, Ctx: ctx, Model: model, Prompt: full, Context: promptContext, LastUser: lastUser}
 	finish := func(res backend.Result, err error, t0 time.Time) string {
@@ -750,6 +789,13 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 		}
 		s.st.Finish(id, phase, backend.Chars(reply), note)
 		s.log.Printf("%s done in %.1fs phase=%s reply=%d chars usage=%v", id, time.Since(t0).Seconds(), phase, backend.Chars(reply), res.Usage)
+		if s.hist != nil && histName != "" {
+			now := time.Now()
+			histMeta["finished"], histMeta["elapsed_s"], histMeta["phase"], histMeta["note"] = now.Format(time.RFC3339), now.Sub(startedAt).Seconds(), string(phase), note
+			if err := s.hist.Write(histName, rawBody, body(res, reply), histMeta); err != nil {
+				s.log.Printf("%s history: %v", id, err)
+			}
+		}
 		return reply
 	}
 
@@ -765,13 +811,6 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 			s.st.Update(id, state.Phase(p), 0, note)
 		}
 		call.OnText = func(soFar string) { s.st.Update(id, state.Generating, backend.Chars(soFar), "") }
-		body := func(res backend.Result, reply string) fiber.Map {
-			return fiber.Map{
-				"id": id, "object": "chat.completion", "created": created, "model": shown,
-				"choices": []fiber.Map{{"index": 0, "message": fiber.Map{"role": "assistant", "content": reply}, "finish_reason": "stop"}},
-				"usage":   usageMap(res.Usage, full, reply),
-			}
-		}
 		if ka := s.cfg.Server.Keepalive; ka > 0 {
 			// Opt-in: a space every ka seconds while waiting is still valid
 			// JSON, and the first failed write says the client is gone.
