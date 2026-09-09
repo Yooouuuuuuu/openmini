@@ -14,9 +14,13 @@ ways to reach Google behind it:
 
 ## Get it (Windows)
 
+You need a Google account on a plan that includes the Gemini app and Antigravity, such as AI Pro. openmini charges
+nothing and adds nothing; it uses what your subscription already gives you.
+
 1. Download `openmini-<version>-windows-amd64.zip` from Releases and unzip it into a folder of your own, not
    Downloads. Everything openmini writes stays in that folder.
-2. Double-click `openmini.exe`. The first time, this runs the setup wizard, not the server:
+2. Double-click `openmini.exe`. Windows flags the unsigned exe: choose "More info", then "Run anyway". The first
+   time, this runs the setup wizard, not the server:
    - **Antigravity.** If Google's Antigravity CLI (`agy`) is missing, it offers to run Google's installer, then to
      sign you in; a browser opens for that.
    - **Gemini web app.** Say yes and it downloads a browser once (about 150 MB) and opens a window for you to sign
@@ -25,30 +29,23 @@ ways to reach Google behind it:
    - At the end it offers to start openmini right away.
 3. From then on, double-clicking `openmini.exe` (or the shortcut) starts the server. Windows Firewall asks once;
    allow it if other devices should reach it. The dashboard is at <http://localhost:18765/usage>, the API at
-   `http://localhost:18765/v1`.
-4. To try it yourself, in PowerShell:
-```powershell
-'{"model":"agyapi/gemini-3.1-pro","messages":[{"role":"user","content":"Write a two-sentence story about a cat who learns to sail."}]}' | curl.exe -s http://localhost:18765/v1/chat/completions -H "Content-Type: application/json" -d "@-"
-```
+   `http://localhost:18765/v1`. To try it from PowerShell:
 
-### Notes
-Windows will say the exe is unrecognised, because it is not code-signed: "More info", then "Run anyway".
+   ```powershell
+   '{"model":"agyapi/gemini-3.1-pro","messages":[{"role":"user","content":"Write a two-sentence story about a cat who learns to sail."}]}' | curl.exe -s http://localhost:18765/v1/chat/completions -H "Content-Type: application/json" -d "@-"
+   ```
 
-Stop it by closing its window, by picking Quit from the tray icon, or with `openmini stop` in PowerShell. There is
-no console to press Ctrl+C in unless you start it with `openmini serve --console`. `openmini doctor` checks
-everything, `openmini login` redoes the Gemini sign-in, `openmini setup` runs the wizard again.
+### Running it
 
-You need a Google account with a plan that includes the Gemini app and Antigravity, such as AI Pro. openmini charges
-nothing and adds nothing; it uses what your subscription already gives you.
+openmini runs in a small window of its own that shows the log. Minimise hides it to the notification area: click the
+tray icon to bring it back, right-click for the menu. Close stops openmini, as does Quit in the tray menu or
+`openmini stop` in PowerShell; there is no console to press Ctrl+C in unless you start it with `openmini serve
+--console`. The terminal you launched it from can be closed. `openmini doctor` checks everything, `openmini login`
+redoes the Gemini sign-in, `openmini setup` runs the wizard again.
 
-**Its own window.** On Windows openmini runs in a small window of its own that shows the log. The minimise
-button hides it to the notification area (click the tray icon to bring it back, right-click for the menu), and the
-close button stops openmini. Nothing runs in the terminal you started it from, which can be closed. `openmini serve
---console` keeps the old behaviour of staying in the terminal.
-
-**Updating.** Download the new zip, stop openmini (close its window), replace `openmini.exe` with the new one and
-start it again. `config.toml` and the `data` folder (your Gemini sign-in, agy's state, history) stay as they are;
-`config.example.toml` in the zip shows any new settings, which all have working defaults when absent.
+**Updating.** Download the new zip, stop openmini, replace `openmini.exe`, start it again. `config.toml` and the
+`data` folder (your Gemini sign-in, agy's state, history) stay as they are; `config.example.toml` in the zip shows
+any new settings, which all have working defaults when absent.
 
 ## The dashboard
 
