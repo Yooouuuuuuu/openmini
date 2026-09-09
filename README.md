@@ -77,6 +77,12 @@ machines. Open it for the tailnet only, in PowerShell run as administrator:
 netsh advfirewall firewall add rule name="openmini" dir=in action=allow protocol=TCP localport=18765 remoteip=100.64.0.0/10
 ```
 
+To close it again:
+
+```powershell
+netsh advfirewall firewall delete rule name="openmini"
+```
+
 ## Good to know
 
 - **Tier limits are Google's.** On AI Pro the Antigravity service refuses `gemini-3.1-pro-high` (HTTP 400); use
