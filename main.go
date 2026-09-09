@@ -2,6 +2,8 @@
 package main
 
 import (
+	"openmini/internal/proc"
+
 	"bufio"
 	"fmt"
 	"io"
@@ -304,7 +306,9 @@ func doctorCmd() *gcli.Command {
 			} else {
 				report(true, "port", fmt.Sprintf("%d free", cfg.Server.Port))
 			}
-			if out, err := exec.Command("tailscale", "status", "--json").Output(); err == nil {
+			ts := exec.Command("tailscale", "status", "--json")
+			proc.Quiet(ts)
+			if out, err := ts.Output(); err == nil {
 				if i := strings.Index(string(out), `"DNSName"`); i > 0 {
 					rest := string(out)[i+len(`"DNSName"`):]
 					if q := strings.Index(rest, `"`); q >= 0 {

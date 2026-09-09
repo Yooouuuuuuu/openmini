@@ -3,6 +3,8 @@
 package agy
 
 import (
+	"openmini/internal/proc"
+
 	"os/exec"
 	"strconv"
 	"syscall"
@@ -18,6 +20,8 @@ func stopTree(cmd *exec.Cmd) {
 	if cmd.Process == nil {
 		return
 	}
-	exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid)).Run()
+	kill := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid))
+	proc.Quiet(kill)
+	kill.Run()
 	cmd.Process.Kill()
 }

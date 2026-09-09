@@ -1,6 +1,8 @@
 package main
 
 import (
+	"openmini/internal/proc"
+
 	"bufio"
 	"fmt"
 	"os"
@@ -62,6 +64,7 @@ func agyState(bin string) (installed, signedIn bool) {
 		return false, false
 	}
 	cmd := exec.Command(bin, "models")
+	proc.Quiet(cmd)
 	cmd.Dir = os.TempDir()
 	out, err := cmd.Output()
 	return true, err == nil && strings.Contains(string(out), "\t")
@@ -111,7 +114,9 @@ func createShortcut(folder string) error {
 		"$s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $d 'openmini.lnk')); " +
 		"$s.TargetPath=" + psq(exe) + "; $s.WorkingDirectory=" + psq(filepath.Dir(exe)) + "; " +
 		"$s.IconLocation=" + psq(exe+",0") + "; $s.Description='openmini'; $s.Save()"
-	return exec.Command("powershell", "-NoProfile", "-Command", ps).Run()
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", ps)
+	proc.Quiet(cmd)
+	return cmd.Run()
 }
 
 // webLogin opens the visible browser and waits until the Gemini app shows an
