@@ -97,7 +97,7 @@ func Load(path string) (*Config, error) {
 
 func (c *Config) applyDefaults() {
 	if c.Server.Port == 0 {
-		c.Server.Port = 18000
+		c.Server.Port = 18765
 	}
 	if c.Server.DefaultBackend == "" {
 		c.Server.DefaultBackend = "web"
@@ -182,7 +182,7 @@ func WriteTemplate(path string) error {
 const Template = `# openmini configuration. Copy to config.toml and edit; config.toml is not committed.
 
 [server]
-port = 18000
+port = 18765
 # Backend used when the model name has no "web/" or "agy/" prefix.
 default_backend = "web"
 # Optional. When set, requests must send "Authorization: Bearer <key>". Leave

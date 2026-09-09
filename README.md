@@ -12,13 +12,13 @@ ways to reach Google behind it:
   adds its own prompt on top of yours.
 
 ```bash
-curl http://localhost:18000/v1/chat/completions \
+curl http://localhost:18765/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "agyapi/gemini-3.1-pro-low",
        "messages": [{"role": "user", "content": "Write a two-sentence story about a cat who learns to sail."}]}'
 ```
 
-Any OpenAI-compatible client works: base URL `http://localhost:18000/v1`, any API key until you set one. The model
+Any OpenAI-compatible client works: base URL `http://localhost:18765/v1`, any API key until you set one. The model
 name picks the backend: `web/3.1 Pro`, `agyapi/gemini-3.1-pro-low`, `agyapi/claude-sonnet-4-6`,
 `agy/gemini-3.6-flash-low`. In the Gemini app, extended thinking (延伸思考) is a switch on top of Pro: `web/3.1 Pro`
 runs plain Pro with the switch off, `web/延伸思考` turns it on. A bare name that exists in exactly one backend goes there; anything else goes to
@@ -36,8 +36,8 @@ runs plain Pro with the switch off, `web/延伸思考` turns it on. A bare name 
    - A desktop shortcut and a Start menu entry, if you want them.
    - At the end it offers to start openmini right away.
 3. From then on, double-clicking `openmini.exe` (or the shortcut) starts the server. Windows Firewall asks once;
-   allow it if other devices should reach it. The dashboard is at <http://localhost:18000/usage>, the API at
-   `http://localhost:18000/v1`.
+   allow it if other devices should reach it. The dashboard is at <http://localhost:18765/usage>, the API at
+   `http://localhost:18765/v1`.
 
 Windows will say the exe is unrecognised, because it is not code-signed: "More info", then "Run anyway".
 
@@ -67,14 +67,14 @@ close button stops openmini. Nothing runs in the terminal you started it from, w
 
 Don't open the port to the internet. Put the PC and your phone on a [Tailscale](https://tailscale.com) tailnet
 instead: nothing to configure in openmini, and the same address works from anywhere, for example
-`http://desktop-name:18000/v1` as the base URL in your phone's chat app and `/usage` for the dashboard.
+`http://desktop-name:18765/v1` as the base URL in your phone's chat app and `/usage` for the dashboard.
 `openmini doctor` prints the address once Tailscale is up. Set `api_keys` if other people share the tailnet.
 
 If the phone cannot reach it while the PC's own browser can, Windows Firewall is blocking the port for other
 machines. Open it for the tailnet only, in PowerShell run as administrator:
 
 ```powershell
-netsh advfirewall firewall add rule name="openmini" dir=in action=allow protocol=TCP localport=18000 remoteip=100.64.0.0/10
+netsh advfirewall firewall add rule name="openmini" dir=in action=allow protocol=TCP localport=18765 remoteip=100.64.0.0/10
 ```
 
 ## Good to know
