@@ -3,20 +3,22 @@
 ## In short
 
 openmini answered every one of the 196 requests in this run, at four times of day, across prompt sizes from 10k to
-300k characters, with none stuck or dropped. Median seconds to a full reply, pooled over all sizes and models:
+300k characters, with none stuck or dropped. Median throughput in tokens per second, pooled over all sizes and
+models (tokens estimated at four characters each; higher is better):
 
 | backend | 08:00 | 14:00 | 20:00 | 02:00 |
 |---|---:|---:|---:|---:|
-| web | 27.3 s | 15.6 s | 25.1 s | 39.5 s |
-| agy | 7.0 s | 8.4 s | 16.1 s | 8.5 s |
-| agyapi | 4.4 s | 5.5 s | 5.1 s | 4.8 s |
+| web | 807 | 1510 | 886 | 538 |
+| agy | 1398 | 960 | 724 | 896 |
+| agyapi | 3283 | 2740 | 3975 | 3994 |
 
-- **agyapi is fast and steady** at every hour, and size barely matters: a 300k prompt answers in about the time a
-  10k one does.
-- **agy is a few seconds slower** than agyapi, the same service reached through the CLI.
-- **The web backend swings with the hour, not the size** — the same prompt takes two to three times longer at its
-  worst hour than its best, and its slowest hour is the middle of the night, when the Antigravity service is at its
-  calmest. The two Google services do not move together.
+- **agyapi has the highest throughput** at every hour, three to eight times the web backend. Most of each request
+  is fixed overhead, so throughput rises with prompt size: a 300k prompt on agyapi Flash clears over 30,000
+  tokens/s, a 10k one only about 1,300, which is why a pooled median spans a wide range.
+- **agy runs at roughly a third to a half of agyapi's rate**, the same service reached through the CLI.
+- **The web backend is the slowest and swings with the hour** — its rate varies about three times between its best
+  and worst hour, and its worst hour is the middle of the night, when the Antigravity service is at its calmest.
+  The two Google services do not move together.
 
 ## The test
 
@@ -126,8 +128,8 @@ Google is.
 
 ## Summary
 
-Across a full day the order never changed: agyapi fastest and flattest, agy a few seconds behind it, the web
-backend both slowest and by far the most variable. For anything latency-sensitive or large, agyapi is the backend
-to use; the web backend is best kept for when only the Gemini app's own quota or behaviour is wanted, and its
-timing should be expected to vary by the hour. Nothing timed out or got stuck at any hour, which was the main thing
-to confirm.
+Across a full day the order never changed: agyapi highest throughput and steadiest across the hours, agy behind it,
+the web backend both slowest and by far the most variable. For anything latency-sensitive or large, agyapi is the
+backend to use; the web backend is best kept for when only the Gemini app's own quota or behaviour is wanted, and
+its speed should be expected to vary by the hour. Nothing timed out or got stuck at any hour, which was the main
+thing to confirm.
