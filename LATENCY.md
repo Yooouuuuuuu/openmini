@@ -6,7 +6,7 @@ openmini answered every one of the 196 requests in this run, at four times of da
 300k characters, with none stuck or dropped. Median throughput in tokens per second, pooled over all sizes and
 models (tokens estimated at four characters each; higher is better):
 
-| backend | 08:00 | 14:00 | 20:00 | 02:00 |
+| backend (tokens/s) | 08:00 | 14:00 | 20:00 | 02:00 |
 |---|---:|---:|---:|---:|
 | web | 807 | 1510 | 886 | 538 |
 | agy | 1398 | 960 | 724 | 896 |
