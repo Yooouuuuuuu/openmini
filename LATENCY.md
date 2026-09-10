@@ -6,11 +6,11 @@ openmini answered every one of the 196 requests in this run, at four times of da
 300k characters, with none stuck or dropped. Median throughput in tokens per second, pooled over all sizes and
 models (tokens estimated at four characters each; higher is better):
 
-| backend (tokens/s) | 08:00 | 14:00 | 20:00 | 02:00 |
+| backend | 08:00 | 14:00 | 20:00 | 02:00 |
 |---|---:|---:|---:|---:|
-| web | 807 | 1510 | 886 | 538 |
-| agy | 1398 | 960 | 724 | 896 |
-| agyapi | 3283 | 2740 | 3975 | 3994 |
+| web | 807 tok/s | 1510 tok/s | 886 tok/s | 538 tok/s |
+| agy | 1398 tok/s | 960 tok/s | 724 tok/s | 896 tok/s |
+| agyapi | 3283 tok/s | 2740 tok/s | 3975 tok/s | 3994 tok/s |
 
 - **agyapi has the highest throughput** at every hour, three to eight times the web backend. Most of each request
   is fixed overhead, so throughput rises with prompt size: a 300k prompt on agyapi Flash clears over 30,000
