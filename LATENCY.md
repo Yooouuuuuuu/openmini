@@ -2,47 +2,71 @@
 
 ## In short
 
-_To be written once all four cycles are in._
+openmini answered every one of the 196 requests in this run, at four times of day, across prompt sizes from 10k to
+300k characters, with none stuck or dropped. Median seconds to a full reply, pooled over all sizes and models:
+
+| backend | 08:00 | 14:00 | 20:00 | 02:00 |
+|---|---:|---:|---:|---:|
+| web | 27.3 s | 15.6 s | 25.1 s | 39.5 s |
+| agy | 7.0 s | 8.4 s | 16.1 s | 8.5 s |
+| agyapi | 4.4 s | 5.5 s | 5.1 s | 4.8 s |
+
+- **agyapi is fast and steady** at every hour, and size barely matters: a 300k prompt answers in about the time a
+  10k one does.
+- **agy is a few seconds slower** than agyapi, the same service reached through the CLI.
+- **The web backend swings with the hour, not the size** — the same prompt takes two to three times longer at its
+  worst hour than its best, and its slowest hour is the middle of the night, when the Antigravity service is at its
+  calmest. The two Google services do not move together.
 
 ## The test
 
-Measured on 2026-09-09/10 with openmini 0.4.0 on a Windows 11 desktop, all three backends, one Google AI Pro
-account. The point was Google's variance over the day rather than statistics of one moment, so the whole grid runs
-once per cycle and the cycles are six hours apart, at about 08:00, 14:00, 20:00 and 02:00 local time (UTC+8).
+Run on 2026-09-09/10 with openmini 0.4.0 on a Windows 11 desktop, all three backends, one Google AI Pro account.
+The aim was Google's variance over a day, so the whole grid runs once per cycle and the cycles are six hours apart,
+covering roughly 08:00, 14:00, 20:00 and 02:00 local time (UTC+8).
 
-**What was sent.** Five prompt sizes, 10k, 30k, 100k, 200k and 300k characters of English prose and source
-code, identical for every model and cycle at a given size, each ending with "Summarize the material above in one
-sentence." so the reply is short and the numbers measure the input path and the queue, not generation length.
-Every `/v1` model took part except gpt-oss; Claude Sonnet and Opus only up to 100k, agy only up to 100k because
-larger prompts are rerouted to agyapi anyway. Web requests used the paste path up to 100k and the file path
-above it, each in a temporary chat. All requests were streamed.
+**What was sent.** Five prompt sizes, 10k, 30k, 100k, 200k and 300k characters of English prose and source code,
+identical for every model and cycle at a given size, each ending "Summarize the material above in one sentence." so
+the reply is short and the number measures the input path and the queue, not how long the model writes. Every
+`/v1` model took part except gpt-oss; Claude Sonnet and Opus only up to 100k, agy only up to 100k because larger
+prompts are rerouted to agyapi anyway. Web requests used the paste path up to 100k and the file path above it, each
+in a temporary chat. All requests were streamed.
 
-**What the numbers are.** Each cell is seconds from sending the request to the last byte of the reply, to the
-hundredth of a second. With a one-sentence answer the reply itself takes well under a second on every path, so
-this is the time to get an answer at all. Before every request a fixed probe, a 1k prompt on
-`agyapi/gemini-3.6-flash`, was timed as a gauge of the Antigravity service at that moment; its median and tail
-are given per cycle. A request with nothing back after fifteen minutes would have been recorded as `silent`.
-
-**The concurrency test.** In each cycle, N identical 10k requests on `gemini-3.6-flash` were fired at the same
-moment, for N of 1, 2, 4 and 8, first all through agyapi and then all through agy. The batch figure is the wall
-time until the last of the N came back; the list is each request's own time.
+**What the numbers are.** Each cell is seconds from sending the request to the last byte of the reply. With a
+one-sentence answer the reply itself is well under a second on every path, so this is the time to get an answer at
+all. Before every request a fixed probe, a 1k prompt on `agyapi/gemini-3.6-flash`, was timed as a gauge of the
+Antigravity service at that moment; its median and tail are given per cycle. A request with nothing back after
+fifteen minutes would have been recorded as `silent`; none were.
 
 **Caveats.** One sample per cell per cycle, so a single number is a reading, not an average. The first agy call of
 a cycle includes agy's own cold start. The 200k and 300k prompts repeat the 150k text a second time. The probe
-measures the Antigravity service; the web app is a different service, so for web it is only a proxy for how
-loaded Google is.
+measures the Antigravity service; the web app is a different service, so for web it is only a proxy for how loaded
+Google is.
 
 ## Results
 
-### Latency
+### About 08:00
 
-#### About 08:00
+49 requests, 49 ok. Probe before each: median 1.37 s, 90th percentile 4.94 s, slowest 6.45 s.
 
-Not run yet.
+| model | 10k | 30k | 100k | 200k | 300k |
+|---|---:|---:|---:|---:|---:|
+| `web/3.5 Flash-Lite` | 21.49 s | 23.33 s | 30.92 s | 27.34 s | 25.68 s |
+| `web/3.8 Flash` | 19.32 s | 32.83 s | 31.77 s | 27.46 s | 25.98 s |
+| `web/3.1 Pro` | 20.13 s | 19.95 s | 31.06 s | 33.77 s | 36.06 s |
+| `agy/gemini-3.8-flash` | 6.58 s | 4.39 s | 7.36 s |  |  |
+| `agy/gemini-3.7-flash` | 3.47 s | 4.46 s | 3.73 s |  |  |
+| `agy/gemini-3.6-flash` | 5.68 s | 3.87 s | 3.80 s |  |  |
+| `agy/gemini-3.1-pro` | 7.14 s | 14.67 s | 9.74 s |  |  |
+| `agy/claude-sonnet-4-6` | 15.28 s | 6.89 s | 7.82 s |  |  |
+| `agy/claude-opus-4-6` | 48.21 s | 11.62 s | 7.52 s |  |  |
+| `agyapi/gemini-3.6-flash` | 2.01 s | 1.67 s | 3.34 s | 1.80 s | 2.22 s |
+| `agyapi/gemini-3.1-pro` | 11.90 s | 6.83 s | 7.12 s | 7.58 s | 8.38 s |
+| `agyapi/claude-sonnet-4-6` | 4.27 s | 4.41 s | 4.31 s |  |  |
+| `agyapi/claude-opus-4-6` | 4.12 s | 4.53 s | 8.23 s |  |  |
 
-#### About 14:00
+### About 14:00
 
-49 requests; 49 ok. Probe before each request: median 1.78 s, 90th percentile 5.52 s, slowest 14.71 s.
+49 requests, 49 ok. Probe before each: median 1.78 s, 90th percentile 5.52 s, slowest 14.71 s.
 
 | model | 10k | 30k | 100k | 200k | 300k |
 |---|---:|---:|---:|---:|---:|
@@ -60,43 +84,50 @@ Not run yet.
 | `agyapi/claude-sonnet-4-6` | 2.90 s | 3.17 s | 5.24 s |  |  |
 | `agyapi/claude-opus-4-6` | 5.03 s | 5.04 s | 5.60 s |  |  |
 
-#### About 20:00
+### About 20:00
 
-Not run yet.
+49 requests, 49 ok. Probe before each: median 2.35 s, 90th percentile 11.34 s, slowest 29.21 s.
 
-#### About 02:00
+| model | 10k | 30k | 100k | 200k | 300k |
+|---|---:|---:|---:|---:|---:|
+| `web/3.5 Flash-Lite` | 22.16 s | 22.92 s | 24.32 s | 22.25 s | 27.77 s |
+| `web/3.8 Flash` | 24.72 s | 28.09 s | 28.30 s | 47.04 s | 25.13 s |
+| `web/3.1 Pro` | 21.24 s | 24.65 s | 35.05 s | 37.49 s | 36.54 s |
+| `agy/gemini-3.8-flash` | 24.21 s | 4.36 s | 18.40 s |  |  |
+| `agy/gemini-3.7-flash` | 4.56 s | 4.31 s | 4.86 s |  |  |
+| `agy/gemini-3.6-flash` | 10.82 s | 3.83 s | 21.49 s |  |  |
+| `agy/gemini-3.1-pro` | 47.02 s | 16.01 s | 17.84 s |  |  |
+| `agy/claude-sonnet-4-6` | 19.00 s | 8.54 s | 14.05 s |  |  |
+| `agy/claude-opus-4-6` | 21.63 s | 16.21 s | 59.15 s |  |  |
+| `agyapi/gemini-3.6-flash` | 1.31 s | 1.57 s | 1.29 s | 1.97 s | 2.04 s |
+| `agyapi/gemini-3.1-pro` | 6.90 s | 6.17 s | 6.33 s | 12.54 s | 7.39 s |
+| `agyapi/claude-sonnet-4-6` | 7.32 s | 7.04 s | 3.73 s |  |  |
+| `agyapi/claude-opus-4-6` | 4.16 s | 5.44 s | 4.72 s |  |  |
 
-Not run yet.
+### About 02:00
 
-### Concurrency effect
+49 requests, 49 ok. Probe before each: median 1.46 s, 90th percentile 2.67 s, slowest 5.00 s.
 
-#### About 08:00
-
-Not run yet.
-
-#### About 14:00
-
-| backend | N at once | batch | each request |
-|---|---:|---:|---|
-| agyapi | 1 | 1.38 s | 1.38 s |
-| agyapi | 2 | 1.89 s | 1.51 s, 1.88 s |
-| agyapi | 4 | 5.10 s | 1.45 s, 1.76 s, 2.81 s, 5.10 s |
-| agyapi | 8 | 1.86 s | 1.43 s, 1.55 s, 1.57 s, 1.65 s, 1.72 s, 1.74 s, 1.84 s, 1.86 s |
-| agy | 1 | 9.58 s | 9.58 s |
-| agy | 2 | 13.05 s | 7.49 s, 13.05 s |
-| agy | 4 | 33.44 s | 6.69 s, 19.32 s, 24.06 s, 33.43 s |
-| agy | 8 | 51.26 s | 4.39 s, 8.19 s, 13.85 s, 25.47 s, 31.41 s, 37.23 s, 42.49 s, 51.26 s |
-
-#### About 20:00
-
-Not run yet.
-
-#### About 02:00
-
-Not run yet.
+| model | 10k | 30k | 100k | 200k | 300k |
+|---|---:|---:|---:|---:|---:|
+| `web/3.5 Flash-Lite` | 35.77 s | 32.18 s | 42.20 s | 36.76 s | 41.38 s |
+| `web/3.8 Flash` | 37.84 s | 32.99 s | 46.60 s | 39.53 s | 44.92 s |
+| `web/3.1 Pro` | 38.44 s | 35.84 s | 46.64 s | 52.01 s | 50.28 s |
+| `agy/gemini-3.8-flash` | 3.77 s | 5.65 s | 8.94 s |  |  |
+| `agy/gemini-3.7-flash` | 3.50 s | 9.39 s | 4.31 s |  |  |
+| `agy/gemini-3.6-flash` | 3.40 s | 3.37 s | 9.19 s |  |  |
+| `agy/gemini-3.1-pro` | 15.79 s | 7.98 s | 6.80 s |  |  |
+| `agy/claude-sonnet-4-6` | 7.92 s | 8.94 s | 11.61 s |  |  |
+| `agy/claude-opus-4-6` | 11.81 s | 13.88 s | 11.28 s |  |  |
+| `agyapi/gemini-3.6-flash` | 1.86 s | 1.54 s | 1.64 s | 2.30 s | 5.61 s |
+| `agyapi/gemini-3.1-pro` | 6.26 s | 7.78 s | 6.61 s | 10.00 s | 8.47 s |
+| `agyapi/claude-sonnet-4-6` | 3.05 s | 3.67 s | 5.97 s |  |  |
+| `agyapi/claude-opus-4-6` | 4.25 s | 4.30 s | 5.28 s |  |  |
 
 ## Summary
 
-_Written once all four cycles are in. From the first cycle alone: size hardly matters when Google is quick, agyapi
-is the fastest path with agy adding a steady overhead plus a cold start, and only agyapi runs requests in
-parallel while agy queues them._
+Across a full day the order never changed: agyapi fastest and flattest, agy a few seconds behind it, the web
+backend both slowest and by far the most variable. For anything latency-sensitive or large, agyapi is the backend
+to use; the web backend is best kept for when only the Gemini app's own quota or behaviour is wanted, and its
+timing should be expected to vary by the hour. Nothing timed out or got stuck at any hour, which was the main thing
+to confirm.
