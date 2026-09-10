@@ -3,6 +3,7 @@ package main
 
 import (
 	"openmini/internal/proc"
+	"openmini/internal/ui"
 	"time"
 
 	"bufio"
@@ -38,7 +39,7 @@ func main() {
 		a.Desc = "OpenAI-compatible endpoint over the Gemini web app and the Antigravity CLI"
 	})
 	app.Add(serveCmd(), stopCmd(), setupCmd(), loginCmd(), statusCmd(), doctorCmd(), initCmd())
-	keepConsoleAwake()
+	ui.KeepConsoleAwake()
 	plain := len(os.Args) == 1 // double-click on Windows, or plain "openmini"
 	ran := ""
 	if plain {
@@ -106,7 +107,7 @@ func serveCmd() *gcli.Command {
 				// Start again without a console and let this one go: the copy
 				// that runs has only its own window (minimise hides it to the
 				// tray, close stops it), and this terminal can close.
-				if err := spawnDetached(cfg.Log.Directory); err == nil {
+				if err := ui.SpawnDetached(cfg.Log.Directory); err == nil {
 					spawnedWindow = true
 					fmt.Println("openmini is running in its own window.")
 					return nil
@@ -117,7 +118,7 @@ func serveCmd() *gcli.Command {
 			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 			if runtime.GOOS == "windows" && !consoleMode {
 				url := fmt.Sprintf("http://localhost:%d/usage", cfg.Server.Port)
-				if runWindowed("openmini", url, func() { sigs <- syscall.SIGTERM }, logger.SetSink, logger.Printf) {
+				if ui.Run("openmini", url, func() { sigs <- syscall.SIGTERM }, logger.SetSink, logger.Printf) {
 					logger.Printf("running in openmini's own window: minimise hides it to the tray, close stops openmini")
 				}
 			}
@@ -168,7 +169,7 @@ func serveCmd() *gcli.Command {
 				if webDebug != nil {
 					webDebug.Stop()
 				}
-				closeWindow()
+				ui.Close()
 				os.Exit(0)
 			}()
 			logger.Printf("listening on :%d (base URL http://localhost:%d/v1), default backend %s", cfg.Server.Port, cfg.Server.Port, cfg.Server.DefaultBackend)

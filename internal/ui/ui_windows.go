@@ -1,7 +1,12 @@
 //go:build windows
 
-package main
+package ui
 
+// Package ui is how openmini presents itself on Windows: a small window of
+// its own with the log, a tray icon, the detached relaunch that frees the
+// console, and the console tweak for the wizard. Everywhere else it is a set
+// of no-ops and the server stays in the terminal.
+//
 // On Windows the server runs in a small window of its own: the log scrolls in
 // it, the minimise button hides it to the notification area (a tray icon
 // brings it back), and the close button stops openmini. The console the exe
@@ -136,11 +141,11 @@ type appWindow struct {
 var theWindow *appWindow
 var wndProcCB = syscall.NewCallback(wndProc)
 
-// runWindowed opens openmini's own window on Windows and mirrors the log into
+// Run opens openmini's own window on Windows and mirrors the log into
 // it. quit is called when the user closes the window or picks Quit in the
 // tray menu. It returns false when the window could not be created, in which
 // case the caller keeps the console.
-func runWindowed(title, url string, quit func(), sink func(func(string)), logf func(string, ...any)) bool {
+func Run(title, url string, quit func(), sink func(func(string)), logf func(string, ...any)) bool {
 	ready := make(chan bool, 1)
 	go func() {
 		runtime.LockOSThread()
@@ -336,11 +341,11 @@ func (w *appWindow) loop(logf func(string, ...any)) {
 	}
 }
 
-// spawnDetached starts this exe again with the same arguments but no console
+// SpawnDetached starts this exe again with the same arguments but no console
 // at all, so the child's own window is the only thing on screen; the caller
 // exits right after. Its stderr goes to a file in the log directory, so a
 // crash still leaves a trace.
-func spawnDetached(logDir string) error {
+func SpawnDetached(logDir string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -353,8 +358,8 @@ func spawnDetached(logDir string) error {
 	return cmd.Start()
 }
 
-// closeWindow removes the tray icon on the way out.
-func closeWindow() {
+// Close removes the tray icon on the way out.
+func Close() {
 	if theWindow != nil {
 		theWindow.trayIcon(nimDelete)
 		pDestroyWindow.Call(theWindow.hwnd)

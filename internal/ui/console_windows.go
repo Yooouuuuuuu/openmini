@@ -1,14 +1,14 @@
 //go:build windows
 
-package main
+package ui
 
 import "golang.org/x/sys/windows"
 
-// keepConsoleAwake turns off the console's QuickEdit mode. With it on, a
+// KeepConsoleAwake turns off the console's QuickEdit mode. With it on, a
 // click or a text selection in the window pauses every write the program
 // makes until someone presses Enter or Escape there, which looks like a
 // frozen server.
-func keepConsoleAwake() {
+func KeepConsoleAwake() {
 	h, err := windows.GetStdHandle(windows.STD_INPUT_HANDLE)
 	if err != nil {
 		return
