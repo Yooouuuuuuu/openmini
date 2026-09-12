@@ -92,5 +92,12 @@ type Backend interface {
 	Usage() (any, error)
 }
 
+// Accepter is implemented by a backend that serves ids beyond the ones it
+// lists, such as names the service has renamed. The API layer asks it
+// before handing a request over from another backend.
+type Accepter interface {
+	Accepts(id string) bool
+}
+
 // Chars counts characters, the unit page limits are measured in.
 func Chars(s string) int { return utf8.RuneCountInString(s) }

@@ -97,7 +97,9 @@ workspace = "./data/agy-workspace"
 # parallel = 10
 # agy silently drops everything after the first 192,000 bytes of a message. oversize_action says what to do with a
 # prompt that would be cut: "agyapi" reroutes it to agyapi (the default), "web" sends it to the web backend as a
-# file, "warn" lets agy cut it and notes that, "fail" refuses it.
+# file, "warn" lets agy cut it and notes that, "fail" refuses it. A reroute keeps the model that was asked for
+# (on web, the same family: gemini-3.8-flash-low becomes "3.8 Flash"); when the other backend has no such model
+# the request fails rather than run on a different one.
 oversize_action = "agyapi"
 
 [agyapi]

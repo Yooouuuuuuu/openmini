@@ -38,9 +38,20 @@ type AgyAPI struct {
 	models  []string
 	ready   error
 
-	deprecated map[string]string // old id -> the id the service wants now
-	sem        chan struct{}     // caps requests running at once (cfg.Parallel)
+	deprecated map[string]string      // old id -> the id the service wants now
+	tiered     map[string]tieredLevel // agy-style id -> the service's tiered id and its thinking level
+	sem        chan struct{}          // caps requests running at once (cfg.Parallel)
 }
+
+// tieredLevel is how the service spells one of agy's gemini-3.7-flash-low
+// style ids: a "-tiered" model plus a thinking level in the request.
+type tieredLevel struct {
+	ID    string // e.g. gemini-3.7-flash-tiered
+	Level string // low, medium or high
+}
+
+// tieredLevels are the levels a tiered model is offered at, in agy's order.
+var tieredLevels = []string{"low", "medium", "high"}
 
 func New(cfg config.AgyAPI, timeoutSec int, logf func(string, ...any)) *AgyAPI {
 	home, _ := os.UserHomeDir()
@@ -232,20 +243,36 @@ func (a *AgyAPI) fetchModels() []string {
 	}
 	// Ids the service has renamed: agy sends the new id when given the old
 	// one, and so do we.
-	a.deprecated = map[string]string{}
-	if m, ok := any(out).(map[string]any); ok {
-		if d, ok := m["deprecatedModelIds"].(map[string]any); ok {
-			for old, v := range d {
-				if mm, ok := v.(map[string]any); ok {
-					if nw, ok := mm["newModelId"].(string); ok && nw != "" {
-						a.deprecated[old] = nw
-					}
+	ids, deprecated, tiered := parseModels(out)
+	a.deprecated, a.tiered = deprecated, tiered
+	if len(ids) == 0 {
+		raw, _ := json.Marshal(out)
+		a.logf("agyapi: fetchAvailableModels shape not recognised: %s", firstLine(string(raw)))
+	}
+	return ids
+}
+
+// parseModels reads a fetchAvailableModels response: the ids the service
+// offers, the ids it has renamed (old -> new), and agy-style names for the
+// "-tiered" models. The service lists gemini-3.7-flash-tiered where agy
+// offers gemini-3.7-flash-low/-medium/-high: the CLI sends the tiered id
+// with a thinking level, and so do we, so both backends name models alike.
+// A model that the service already lists at explicit levels (3.6 Flash) is
+// left as is.
+func parseModels(out any) (ids []string, deprecated map[string]string, tiered map[string]tieredLevel) {
+	deprecated = map[string]string{}
+	tiered = map[string]tieredLevel{}
+	m, _ := out.(map[string]any)
+	if d, ok := m["deprecatedModelIds"].(map[string]any); ok {
+		for old, v := range d {
+			if mm, ok := v.(map[string]any); ok {
+				if nw, ok := mm["newModelId"].(string); ok && nw != "" {
+					deprecated[old] = nw
 				}
 			}
 		}
 	}
 	seen := map[string]bool{}
-	var ids []string
 	add := func(s string) {
 		s = strings.TrimSpace(s)
 		if s != "" && !seen[s] {
@@ -279,12 +306,59 @@ func (a *AgyAPI) fetchModels() []string {
 		}
 	}
 	walk(out, 0)
-	sort.Strings(ids)
-	if len(ids) == 0 {
-		raw, _ := json.Marshal(out)
-		a.logf("agyapi: fetchAvailableModels shape not recognised: %s", firstLine(string(raw)))
+	if models, ok := m["models"].(map[string]any); ok {
+		var tieredIDs []string
+		for id := range models {
+			if strings.HasSuffix(id, "-tiered") {
+				tieredIDs = append(tieredIDs, id)
+			}
+		}
+		sort.Strings(tieredIDs)
+		for _, id := range tieredIDs {
+			if entry, ok := models[id].(map[string]any); ok {
+				if thinks, ok := entry["supportsThinking"].(bool); ok && !thinks {
+					continue
+				}
+			}
+			base := strings.TrimSuffix(id, "-tiered")
+			for _, level := range tieredLevels {
+				name := base + "-" + level
+				if seen[name] {
+					continue
+				}
+				add(name)
+				tiered[name] = tieredLevel{ID: id, Level: level}
+			}
+		}
 	}
-	return ids
+	sort.Strings(ids)
+	return ids, deprecated, tiered
+}
+
+// translate turns a requested id into what the service is sent: a renamed
+// id becomes its new name, an agy-style tiered name becomes the tiered id
+// plus its thinking level (empty when none applies).
+func (a *AgyAPI) translate(id string) (model, level string) {
+	if nw, ok := a.deprecated[id]; ok {
+		return nw, ""
+	}
+	if t, ok := a.tiered[id]; ok {
+		return t.ID, t.Level
+	}
+	return id, ""
+}
+
+// Accepts reports whether id is a model this backend can serve: one it
+// lists, one the service has renamed, or an agy-style tiered name.
+func (a *AgyAPI) Accepts(id string) bool {
+	for _, m := range a.models {
+		if strings.EqualFold(m, id) {
+			return true
+		}
+	}
+	_, dep := a.deprecated[id]
+	_, tier := a.tiered[id]
+	return dep || tier
 }
 
 // ---------------------------------------------------------------------------
@@ -338,12 +412,14 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
 	if id == "" {
 		id = a.cfg.Model
 	}
-	model := id // the service takes agy's slugs verbatim
-	if nw, ok := a.deprecated[id]; ok {
-		a.logf("agyapi: %s is deprecated by the service; sending %s", id, nw)
-		model = nw
+	model, level := a.translate(id)
+	if model != id {
+		a.logf("agyapi: %s is %s with thinking level %q at the service", id, model, level)
 	}
 	gen := map[string]any{}
+	if level != "" {
+		gen["thinkingConfig"] = map[string]any{"thinkingLevel": level}
+	}
 	if c.MaxTokens > 0 {
 		gen["maxOutputTokens"] = c.MaxTokens
 	}

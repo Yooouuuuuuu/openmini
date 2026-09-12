@@ -325,6 +325,46 @@ func (s *Server) all(h fiber.Handler) fiber.Handler {
 	}
 }
 
+// refusing stands in for a backend whose request must not run: Complete
+// returns the reason, everything else is the backend's own.
+type refusing struct {
+	backend.Backend
+	err error
+}
+
+func (r refusing) Complete(backend.Call) (backend.Result, error) { return backend.Result{}, r.err }
+
+// equivalent finds the id backend b serves the requested model under: the id
+// itself when b lists it, an id b says it accepts (a renamed or tiered
+// name), or, for a backend with picker labels like "3.8 Flash", the label
+// naming the same family as gemini-3.8-flash-low. The thinking level is
+// lost in that last case, since the picker has none.
+func equivalent(b backend.Backend, id string) (string, bool) {
+	for _, m := range b.Models() {
+		if strings.EqualFold(m, id) {
+			return m, true
+		}
+	}
+	if a, ok := b.(backend.Accepter); ok && a.Accepts(id) {
+		return id, true
+	}
+	base, _ := family(id)
+	want := labelKey(strings.TrimPrefix(strings.ToLower(base), "gemini-"))
+	for _, m := range b.Models() {
+		if labelKey(m) == want {
+			return m, true
+		}
+	}
+	return "", false
+}
+
+// labelKey reduces "3.5 Flash-Lite" and "3.5-flash-lite" to one form.
+func labelKey(s string) string {
+	s = strings.ToLower(s)
+	s = strings.NewReplacer("-", " ", "_", " ").Replace(s)
+	return strings.Join(strings.Fields(s), " ")
+}
+
 // family strips a trailing thinking level, so gemini-3.6-flash-high and
 // gemini-3.6-flash-low are one model with two levels.
 func family(id string) (base, level string) {
@@ -759,14 +799,31 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 	if shown == "" {
 		shown = b.Name() + "/default"
 	}
-	// agy silently cuts the middle out of messages above its cap; with
-	// oversize_action = "web" such prompts go to the web backend instead,
-	// which delivers them as a file attachment.
+	// agy drops everything after its message cap; with oversize_action =
+	// "agyapi" or "web" such prompts go to that backend instead, under the
+	// model that was asked for. When that backend cannot take the model, or
+	// is not ready, the request fails: it never runs on a different model
+	// than the one requested.
 	rerouted := ""
 	if act := s.cfg.Agy.OversizeAction; b.Name() == "agy" && len(full) > agy.MaxMessageBytes && (act == "web" || act == "agyapi") {
-		if alt, ok := s.backends[act]; ok && alt.Ready() == nil {
-			rerouted = fmt.Sprintf("prompt is %d bytes, above agy's %d-byte message cap; sent to the %s backend instead", len(full), agy.MaxMessageBytes, act)
-			b, model = alt, ""
+		want := model
+		if want == "" {
+			want = s.cfg.Agy.Model
+		}
+		head := fmt.Sprintf("prompt is %d bytes, above agy's %d-byte message cap", len(full), agy.MaxMessageBytes)
+		alt, ok := s.backends[act]
+		switch {
+		case !ok:
+			b = refusing{b, fmt.Errorf("%s; the %s backend (agy.oversize_action) is not enabled", head, act)}
+		case alt.Ready() != nil:
+			b = refusing{b, fmt.Errorf("%s; the %s backend is not ready: %v", head, act, alt.Ready())}
+		default:
+			if alias, ok := equivalent(alt, want); ok {
+				rerouted = fmt.Sprintf("%s; sent to the %s backend as %s instead", head, act, alias)
+				b, model = alt, alias
+			} else {
+				b = refusing{b, fmt.Errorf("%s; the %s backend has no model %s, so the request was not run on another one", head, act, want)}
+			}
 		}
 	}
 	s.st.Start(id, b.Name(), model, backend.Chars(full), req.Stream)

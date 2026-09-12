@@ -85,14 +85,17 @@ netsh advfirewall firewall delete rule name="openmini"
 ## Good to know
 
 - **Tier limits are Google's.** The Antigravity service has renamed `gemini-3.1-pro-high` to `gemini-pro-agent`;
-  openmini sends the new id when given the old one, so either works. When the Gemini app's 5-hour window runs out it locks Pro and Flash and only Flash-Lite
+  openmini sends the new id when given the old one, so either works. The service lists 3.7 Flash and 3.8 Flash as
+  one "tiered" model each; agyapi offers them under agy's names (`gemini-3.7-flash-low`, `-medium`, `-high`) and
+  sends the tiered id with that thinking level, so agy and agyapi name models alike. When the Gemini app's 5-hour window runs out it locks Pro and Flash and only Flash-Lite
   answers; openmini refuses instead of silently downgrading (`unavailable_action`). The dashboard shows locks and
   reset times.
 - **Size limits.** The Gemini web prompt box refuses single lines over about 32k characters; pasted prompts arrive
   intact to about 100k characters and larger ones go as a file. agy drops everything after the first 192,000 bytes
   of a message. `oversize_action` says what openmini does with an agy prompt that would be cut: `agyapi` reroutes it to
   agyapi (the default), `web` sends it to the web backend as a file, `warn` lets agy cut it and notes that, `fail`
-  refuses it.
+  refuses it. A reroute keeps the model that was asked for (on web, the same family: `gemini-3.8-flash-low`
+  becomes `3.8 Flash`); if the other backend has no such model, the request fails instead of running on another.
 - **Temporary chats.** Every web request starts as a Gemini temporary chat, so nothing openmini sends is kept in
   the account's history or used as context for later chats. `temporary_chat = false` in `[web]` turns that off.
 - **History.** `[history] enabled = true` writes one JSON file per request to `data/history`, named
