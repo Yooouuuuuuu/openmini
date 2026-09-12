@@ -350,10 +350,12 @@ system_instruction = ""
 # plain text gets from the output filter (PROHIBITED_CONTENT mid-reply). If
 # the request itself carries such a function (a single tool with one string
 # argument, as anti-truncation presets send), that one is used; otherwise
-# openmini declares its own. The reply arrives in one piece at the end, so
-# streaming clients see nothing until it is complete.
+# openmini declares its own and adds one sentence at the end of the prompt
+# asking for it. The reply arrives in one piece at the end, so streaming
+# clients see nothing until it is complete.
 tool_transport = false
-# Extra attempts when the model returns nothing or a malformed function call.
-# A reply cut by the output filter is not retried. Default 1.
+# Extra attempts when the model returns nothing, a malformed function call,
+# or ignored the declared function and had its plain text cut by the filter.
+# A cut plain-text reply with the transport off is not retried. Default 1.
 # retries = 1
 `

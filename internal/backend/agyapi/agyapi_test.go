@@ -141,27 +141,42 @@ func TestReadStreamPlainText(t *testing.T) {
 	// declared) is not a reply.
 	stream = sse(`{"response":{"candidates":[{"content":{"parts":[{"functionCall":{"name":"other","args":{"content":"x"}}}]},"finishReason":"MALFORMED_FUNCTION_CALL"}]}}`)
 	st, _ = readStream(strings.NewReader(stream), &backend.Transport{Name: "openmini_reply", Param: "content"}, nil, nil)
-	if st.viaTool || st.text != "" || st.finish != "MALFORMED_FUNCTION_CALL" {
+	if st.viaTool || st.text != "" || st.finish != "MALFORMED_FUNCTION_CALL" || !reflect.DeepEqual(st.otherCalls, []string{"other"}) {
 		t.Errorf("got %+v", st)
+	}
+	// Transport declared, model answered in text: the diagnostics say so.
+	stream = sse(`{"response":{"candidates":[{"content":{"parts":[{"text":"a"},{"text":"b"}]},"finishReason":"STOP"}]}}`)
+	st, _ = readStream(strings.NewReader(stream), &backend.Transport{Name: "openmini_reply", Param: "content"}, nil, nil)
+	if st.viaTool || st.text != "ab" || st.textParts != 2 || len(st.otherCalls) != 0 {
+		t.Errorf("got %+v", st)
+	}
+}
+
+func TestControlSentence(t *testing.T) {
+	s := controlSentence(backend.Transport{Name: "openmini_reply", Param: "content"})
+	if !strings.Contains(s, "`openmini_reply`") || !strings.Contains(s, "`content`") {
+		t.Errorf("sentence does not name the function and argument: %q", s)
 	}
 }
 
 func TestRetryable(t *testing.T) {
 	cases := []struct {
 		text, finish string
+		ignored      bool
 		want         bool
 	}{
-		{"", "MALFORMED_FUNCTION_CALL", true},
-		{"", "STOP", true},
-		{"", "", true},
-		{"partial story", "PROHIBITED_CONTENT", false}, // the filter cut it: retrying only spends quota
-		{"", "PROHIBITED_CONTENT", false},
-		{"fine", "STOP", false},
-		{"", "MAX_TOKENS", false},
+		{"", "MALFORMED_FUNCTION_CALL", false, true},
+		{"", "STOP", false, true},
+		{"", "", false, true},
+		{"partial story", "PROHIBITED_CONTENT", false, false}, // plain text cut, no transport: retrying only spends quota
+		{"partial story", "PROHIBITED_CONTENT", true, true},   // the model ignored the transport and got cut: another try may use it
+		{"", "PROHIBITED_CONTENT", false, false},
+		{"fine", "STOP", true, false}, // ignored the transport but the reply is whole: keep it
+		{"", "MAX_TOKENS", false, false},
 	}
 	for _, c := range cases {
-		if got := retryable(c.text, c.finish); got != c.want {
-			t.Errorf("retryable(%q, %q) = %v, want %v", c.text, c.finish, got, c.want)
+		if got := retryable(c.text, c.finish, c.ignored); got != c.want {
+			t.Errorf("retryable(%q, %q, %v) = %v, want %v", c.text, c.finish, c.ignored, got, c.want)
 		}
 	}
 }

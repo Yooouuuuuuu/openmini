@@ -102,8 +102,9 @@ netsh advfirewall firewall delete rule name="openmini"
   is not cut the same way. If the request itself carries such a function, a single tool with one string argument
   as anti-truncation presets send, that one is used instead of openmini's own, so the model sees one instruction.
   The reply arrives in one piece at the end, so a streaming client sees nothing until it is complete. With the
-  switch off, tool definitions in a request are ignored as before. Independently, agyapi retries once
-  (`retries`) when the model returns nothing or a malformed function call.
+  switch off, tool definitions in a request are ignored as before. The model ignores the declared function now
+  and then on long prompts and answers in plain text; the log says so, and if that reply gets cut agyapi retries
+  once (`retries`), as it does when the model returns nothing or a malformed function call.
 - **Temporary chats.** Every web request starts as a Gemini temporary chat, so nothing openmini sends is kept in
   the account's history or used as context for later chats. `temporary_chat = false` in `[web]` turns that off.
 - **History.** `[history] enabled = true` writes one JSON file per request to `data/history`, named

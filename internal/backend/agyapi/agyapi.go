@@ -410,15 +410,27 @@ var defaultTransport = backend.Transport{
 	Param:       "content",
 }
 
-// retryable says whether an attempt that produced no usable reply is worth
-// repeating: the model tried to call a function that does not exist, or
-// answered with nothing at all. A reply cut by the output filter
-// (PROHIBITED_CONTENT) is not retried; it would only spend quota.
-func retryable(text, finish string) bool {
+// retryable says whether an attempt is worth repeating: the model tried to
+// call a function that does not exist, answered with nothing at all, or,
+// with the transport declared, ignored it and had its plain text cut by
+// the output filter (another try may go through the function and survive).
+// A cut plain-text reply with no transport is not retried; it would only
+// spend quota.
+func retryable(text, finish string, ignoredTransport bool) bool {
 	if finish == "MALFORMED_FUNCTION_CALL" {
 		return true
 	}
-	return text == "" && (finish == "" || finish == "STOP")
+	if text == "" && (finish == "" || finish == "STOP") {
+		return true
+	}
+	return ignoredTransport && finish == "PROHIBITED_CONTENT"
+}
+
+// controlSentence tells the model to answer through the transport function.
+// Google's forced function-calling mode is declared as well, but on long
+// prompts the model ignores it now and then; the sentence lowers that.
+func controlSentence(t backend.Transport) string {
+	return fmt.Sprintf("Deliver your entire reply by calling the function `%s` once, with the whole reply in its `%s` argument. Write nothing outside that call.", t.Name, t.Param)
 }
 
 func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
@@ -437,8 +449,8 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
 	}
 	tries := 1 + a.cfg.Retries
 	for n := 1; ; n++ {
-		res, finish, err := a.attempt(c, tool, n)
-		if err != nil || n >= tries || !retryable(res.Text, finish) {
+		res, finish, ignored, err := a.attempt(c, tool, n)
+		if err != nil || n >= tries || !retryable(res.Text, finish, ignored) {
 			if err == nil && res.Text == "" {
 				res.Text = fmt.Sprintf("[openmini/agyapi] the model returned no text (finish reason %s)", finish)
 			}
@@ -448,9 +460,10 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
 	}
 }
 
-// attempt runs one generation. finish is the service's finish reason, which
-// Complete uses to decide on a retry; res.Text is empty when nothing came.
-func (a *AgyAPI) attempt(c backend.Call, tool *backend.Transport, n int) (res backend.Result, finish string, err error) {
+// attempt runs one generation. finish is the service's finish reason and
+// ignored says a declared transport went unused; Complete decides on a
+// retry from them. res.Text is empty when nothing came.
+func (a *AgyAPI) attempt(c backend.Call, tool *backend.Transport, n int) (res backend.Result, finish string, ignored bool, err error) {
 	id := c.Model
 	if id == "" {
 		id = a.cfg.Model
@@ -469,8 +482,12 @@ func (a *AgyAPI) attempt(c backend.Call, tool *backend.Transport, n int) (res ba
 	// Shape used by the Antigravity clients: userAgent and requestType tell
 	// the service which product's quota applies; enabledCreditTypes names
 	// the subscription entitlement.
+	prompt := c.Prompt
+	if tool != nil && c.Transport == nil {
+		prompt += "\n\n" + controlSentence(*tool)
+	}
 	request := map[string]any{
-		"contents":  []map[string]any{{"role": "user", "parts": []map[string]string{{"text": c.Prompt}}}},
+		"contents":  []map[string]any{{"role": "user", "parts": []map[string]string{{"text": prompt}}}},
 		"sessionId": newSessionID(),
 	}
 	// System instruction: the Antigravity identity snippet first (the IDE's
@@ -529,9 +546,9 @@ func (a *AgyAPI) attempt(c backend.Call, tool *backend.Transport, n int) (res ba
 	resp, err := a.post(ctx, "streamGenerateContent", req, true)
 	if err != nil {
 		if ctx.Err() == context.Canceled {
-			return backend.Result{}, "", fmt.Errorf("stopped by request")
+			return backend.Result{}, "", false, fmt.Errorf("stopped by request")
 		}
-		return backend.Result{}, "", err
+		return backend.Result{}, "", false, err
 	}
 	defer resp.Body.Close()
 	if c.OnPhase != nil {
@@ -541,20 +558,20 @@ func (a *AgyAPI) attempt(c backend.Call, tool *backend.Transport, n int) (res ba
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		msg := firstLine(string(raw))
 		if resp.StatusCode == 429 {
-			return backend.Result{}, "", fmt.Errorf("rate limited (HTTP 429, retry after %s): %s", resp.Header.Get("Retry-After"), msg)
+			return backend.Result{}, "", false, fmt.Errorf("rate limited (HTTP 429, retry after %s): %s", resp.Header.Get("Retry-After"), msg)
 		}
-		return backend.Result{}, "", fmt.Errorf("HTTP %d from %s: %s", resp.StatusCode, model, msg)
+		return backend.Result{}, "", false, fmt.Errorf("HTTP %d from %s: %s", resp.StatusCode, model, msg)
 	}
 
 	st, scanErr := readStream(resp.Body, tool, c.OnPhase, c.OnText)
 	if scanErr != nil && st.text == "" {
 		if ctx.Err() == context.Canceled {
-			return backend.Result{}, "", fmt.Errorf("stopped by request")
+			return backend.Result{}, "", false, fmt.Errorf("stopped by request")
 		}
-		return backend.Result{}, "", fmt.Errorf("stream: %v", scanErr)
+		return backend.Result{}, "", false, fmt.Errorf("stream: %v", scanErr)
 	}
 	if ctx.Err() == context.Canceled && st.text != "" {
-		return backend.Result{Text: st.text, Status: "STOPPED"}, st.finish, nil
+		return backend.Result{Text: st.text, Status: "STOPPED"}, st.finish, false, nil
 	}
 	via := ""
 	if st.viaTool {
@@ -562,13 +579,16 @@ func (a *AgyAPI) attempt(c backend.Call, tool *backend.Transport, n int) (res ba
 		if st.stray > 0 {
 			a.logf("agyapi: %s %d chars of plain text arrived beside the tool call and were dropped", c.ID, st.stray)
 		}
+	} else if tool != nil {
+		ignored = true
+		a.logf("agyapi: %s the model ignored the declared function %s and answered in plain text (%d text parts, other calls: %v)", c.ID, tool.Name, st.textParts, st.otherCalls)
 	}
 	a.logf("agyapi: %s %s finished in %.1fs, %d chars%s, finish=%s", c.ID, model, time.Since(t0).Seconds(), backend.Chars(st.text), via, st.finish)
 	status := "SUCCESS"
 	if st.finish != "" && st.finish != "STOP" {
 		status = st.finish
 	}
-	return backend.Result{Text: st.text, Status: status, Usage: st.usage}, st.finish, nil
+	return backend.Result{Text: st.text, Status: status, Usage: st.usage}, st.finish, ignored, nil
 }
 
 // streamResult is what readStream gathered from one SSE reply.
@@ -578,6 +598,9 @@ type streamResult struct {
 	usage   map[string]int
 	viaTool bool // the reply came through the transport function
 	stray   int  // characters of plain text that arrived beside a tool call
+	// Diagnostics for a declared transport the model did not use.
+	textParts  int      // plain text parts seen
+	otherCalls []string // names of function calls that were not the transport
 }
 
 // readStream reads the service's SSE events. Text parts are appended and
@@ -623,6 +646,9 @@ func readStream(r io.Reader, tool *backend.Transport, onPhase func(phase, note s
 		}
 		for _, cand := range ev.Response.Candidates {
 			for _, p := range cand.Content.Parts {
+				if p.FunctionCall != nil && (tool == nil || p.FunctionCall.Name != tool.Name) {
+					st.otherCalls = append(st.otherCalls, p.FunctionCall.Name)
+				}
 				if p.FunctionCall != nil && tool != nil && p.FunctionCall.Name == tool.Name {
 					if s, ok := p.FunctionCall.Args[tool.Param].(string); ok {
 						toolText += s
@@ -642,6 +668,7 @@ func readStream(r io.Reader, tool *backend.Transport, onPhase func(phase, note s
 				if p.Thought || p.Text == "" {
 					continue
 				}
+				st.textParts++
 				if !generating {
 					generating = true
 					if onPhase != nil {
