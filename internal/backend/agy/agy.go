@@ -3,8 +3,6 @@
 package agy
 
 import (
-	"openmini/internal/proc"
-
 	"bufio"
 	"context"
 	"encoding/json"
@@ -68,7 +66,7 @@ func (a *Agy) Ready() error {
 
 func (a *Agy) readyNow() error {
 	lst := exec.Command(a.cfg.Binary, "models")
-	proc.Quiet(lst)
+	backend.PrepareAgy(lst)
 	out, err := lst.Output()
 	if err != nil {
 		return fmt.Errorf("agy models: %v (is agy installed and signed in?)", err)
@@ -143,7 +141,7 @@ func (a *Agy) Complete(c backend.Call) (backend.Result, error) {
 	cmd := exec.CommandContext(ctx, a.cfg.Binary, args...)
 	cmd.Dir = a.cfg.Workspace
 	cmd.SysProcAttr = procAttr()
-	proc.Quiet(cmd)
+	backend.PrepareAgy(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return backend.Result{}, err
@@ -239,7 +237,7 @@ func (a *Agy) Complete(c backend.Call) (backend.Result, error) {
 // Usage runs agy's /usage command and returns the parsed rows.
 func (a *Agy) Usage() (any, error) {
 	cmd := exec.Command(a.cfg.Binary, "--print", "/usage", "--output-format", "text")
-	proc.Quiet(cmd)
+	backend.PrepareAgy(cmd)
 	cmd.Dir = a.cfg.Workspace
 	out, err := cmd.CombinedOutput()
 	if err != nil && len(out) == 0 {

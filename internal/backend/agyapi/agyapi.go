@@ -4,8 +4,6 @@
 package agyapi
 
 import (
-	"openmini/internal/proc"
-
 	"bufio"
 	"bytes"
 	"context"
@@ -111,7 +109,7 @@ func (a *AgyAPI) ensureToken(force bool) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, a.cfg.AgyBinary, "models")
-			proc.Quiet(cmd)
+			backend.PrepareAgy(cmd)
 			cmd.Dir = os.TempDir()
 			if out, err := cmd.CombinedOutput(); err != nil {
 				a.logf("agyapi: token refresh via agy failed: %v: %s", err, firstLine(string(out)))

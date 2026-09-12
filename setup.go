@@ -64,7 +64,7 @@ func agyState(bin string) (installed, signedIn bool) {
 		return false, false
 	}
 	cmd := exec.Command(bin, "models")
-	proc.Quiet(cmd)
+	backend.PrepareAgy(cmd)
 	cmd.Dir = os.TempDir()
 	out, err := cmd.Output()
 	return true, err == nil && strings.Contains(string(out), "\t")

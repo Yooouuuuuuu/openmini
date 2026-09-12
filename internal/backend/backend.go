@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 	"unicode/utf8"
+
+	"openmini/internal/proc"
 )
 
 // FindAgy returns the agy binary to run: bin (with a leading ~ expanded) if
@@ -39,6 +41,16 @@ func FindAgy(bin string) string {
 		}
 	}
 	return bin
+}
+
+// PrepareAgy readies a command that runs agy: no console window of its own,
+// and agy's auto-updater off. Without the latter every agy run spawns a
+// separate update process, which on Windows opens a console window for a
+// moment even when agy itself is hidden. The variable is agy's own; it
+// only takes "true".
+func PrepareAgy(cmd *exec.Cmd) {
+	proc.Quiet(cmd)
+	cmd.Env = append(os.Environ(), "AGY_CLI_DISABLE_AUTO_UPDATE=true")
 }
 
 // Call is one prompt for a backend.
