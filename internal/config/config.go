@@ -100,13 +100,19 @@ type AgyAPI struct {
 	OfficialPrompt    bool     `toml:"official_prompt"`    // send the Antigravity identity snippet as the first system part
 	SystemInstruction string   `toml:"system_instruction"` // optional instruction of your own, sent after it
 	ProbeModel        string   `toml:"probe_model"`        // cheap model used by /tools/policy-bisect
+	ToolTransport     bool     `toml:"tool_transport"`     // make the model answer through a function call and unwrap it
+	Retries           int      `toml:"retries"`            // extra attempts when a reply is empty or a malformed function call; default 1
 }
 
 // Load reads path and fills in defaults for anything left out.
 func Load(path string) (*Config, error) {
 	var c Config
-	if _, err := toml.DecodeFile(path, &c); err != nil {
+	md, err := toml.DecodeFile(path, &c)
+	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	if !md.IsDefined("agyapi", "retries") {
+		c.AgyAPI.Retries = 1
 	}
 	c.applyDefaults()
 	return &c, nil
@@ -339,4 +345,15 @@ official_prompt = false
 system_instruction = ""
 # Requests agyapi runs at once. Default 10.
 # parallel = 10
+# Tool transport: the model is made to answer by calling one function and the
+# reply is taken from its argument. Text delivered this way escapes the cuts
+# plain text gets from the output filter (PROHIBITED_CONTENT mid-reply). If
+# the request itself carries such a function (a single tool with one string
+# argument, as anti-truncation presets send), that one is used; otherwise
+# openmini declares its own. The reply arrives in one piece at the end, so
+# streaming clients see nothing until it is complete.
+tool_transport = false
+# Extra attempts when the model returns nothing or a malformed function call.
+# A reply cut by the output filter is not retried. Default 1.
+# retries = 1
 `

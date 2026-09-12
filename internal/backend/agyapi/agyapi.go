@@ -402,18 +402,61 @@ func newSessionID() string {
 	return fmt.Sprintf("-%d", n)
 }
 
+// defaultTransport is the reply function openmini declares when the
+// request brought none of its own.
+var defaultTransport = backend.Transport{
+	Name:        "openmini_reply",
+	Description: "Deliver the complete final reply. Put the whole reply in content.",
+	Param:       "content",
+}
+
+// retryable says whether an attempt that produced no usable reply is worth
+// repeating: the model tried to call a function that does not exist, or
+// answered with nothing at all. A reply cut by the output filter
+// (PROHIBITED_CONTENT) is not retried; it would only spend quota.
+func retryable(text, finish string) bool {
+	if finish == "MALFORMED_FUNCTION_CALL" {
+		return true
+	}
+	return text == "" && (finish == "" || finish == "STOP")
+}
+
 func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
 	if err := a.Ready(); err != nil {
 		return backend.Result{}, err
 	}
 	a.sem <- struct{}{}
 	defer func() { <-a.sem }()
+	var tool *backend.Transport
+	if a.cfg.ToolTransport && c.MaxTokens == 0 { // probes (MaxTokens) stay plain text
+		t := defaultTransport
+		if c.Transport != nil {
+			t = *c.Transport
+		}
+		tool = &t
+	}
+	tries := 1 + a.cfg.Retries
+	for n := 1; ; n++ {
+		res, finish, err := a.attempt(c, tool, n)
+		if err != nil || n >= tries || !retryable(res.Text, finish) {
+			if err == nil && res.Text == "" {
+				res.Text = fmt.Sprintf("[openmini/agyapi] the model returned no text (finish reason %s)", finish)
+			}
+			return res, err
+		}
+		a.logf("agyapi: %s no usable reply (finish %q); retrying, attempt %d of %d", c.ID, finish, n+1, tries)
+	}
+}
+
+// attempt runs one generation. finish is the service's finish reason, which
+// Complete uses to decide on a retry; res.Text is empty when nothing came.
+func (a *AgyAPI) attempt(c backend.Call, tool *backend.Transport, n int) (res backend.Result, finish string, err error) {
 	id := c.Model
 	if id == "" {
 		id = a.cfg.Model
 	}
 	model, level := a.translate(id)
-	if model != id {
+	if model != id && n == 1 {
 		a.logf("agyapi: %s is %s with thinking level %q at the service", id, model, level)
 	}
 	gen := map[string]any{}
@@ -446,6 +489,21 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
 	if len(gen) > 0 {
 		request["generationConfig"] = gen
 	}
+	// Tool transport: one function the model must answer through; its
+	// argument is the reply. Text delivered this way is not subject to the
+	// cut-offs plain text gets.
+	if tool != nil {
+		request["tools"] = []map[string]any{{"functionDeclarations": []map[string]any{{
+			"name":        tool.Name,
+			"description": tool.Description,
+			"parameters": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{tool.Param: map[string]any{"type": "string"}},
+				"required":   []string{tool.Param},
+			},
+		}}}}
+		request["toolConfig"] = map[string]any{"functionCallingConfig": map[string]any{"mode": "ANY", "allowedFunctionNames": []string{tool.Name}}}
+	}
 	req := map[string]any{
 		"model":       model,
 		"project":     a.project,
@@ -471,9 +529,9 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
 	resp, err := a.post(ctx, "streamGenerateContent", req, true)
 	if err != nil {
 		if ctx.Err() == context.Canceled {
-			return backend.Result{}, fmt.Errorf("stopped by request")
+			return backend.Result{}, "", fmt.Errorf("stopped by request")
 		}
-		return backend.Result{}, err
+		return backend.Result{}, "", err
 	}
 	defer resp.Body.Close()
 	if c.OnPhase != nil {
@@ -483,16 +541,54 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		msg := firstLine(string(raw))
 		if resp.StatusCode == 429 {
-			return backend.Result{}, fmt.Errorf("rate limited (HTTP 429, retry after %s): %s", resp.Header.Get("Retry-After"), msg)
+			return backend.Result{}, "", fmt.Errorf("rate limited (HTTP 429, retry after %s): %s", resp.Header.Get("Retry-After"), msg)
 		}
-		return backend.Result{}, fmt.Errorf("HTTP %d from %s: %s", resp.StatusCode, model, msg)
+		return backend.Result{}, "", fmt.Errorf("HTTP %d from %s: %s", resp.StatusCode, model, msg)
 	}
 
+	st, scanErr := readStream(resp.Body, tool, c.OnPhase, c.OnText)
+	if scanErr != nil && st.text == "" {
+		if ctx.Err() == context.Canceled {
+			return backend.Result{}, "", fmt.Errorf("stopped by request")
+		}
+		return backend.Result{}, "", fmt.Errorf("stream: %v", scanErr)
+	}
+	if ctx.Err() == context.Canceled && st.text != "" {
+		return backend.Result{Text: st.text, Status: "STOPPED"}, st.finish, nil
+	}
+	via := ""
+	if st.viaTool {
+		via = " via " + tool.Name
+		if st.stray > 0 {
+			a.logf("agyapi: %s %d chars of plain text arrived beside the tool call and were dropped", c.ID, st.stray)
+		}
+	}
+	a.logf("agyapi: %s %s finished in %.1fs, %d chars%s, finish=%s", c.ID, model, time.Since(t0).Seconds(), backend.Chars(st.text), via, st.finish)
+	status := "SUCCESS"
+	if st.finish != "" && st.finish != "STOP" {
+		status = st.finish
+	}
+	return backend.Result{Text: st.text, Status: status, Usage: st.usage}, st.finish, nil
+}
+
+// streamResult is what readStream gathered from one SSE reply.
+type streamResult struct {
+	text    string // the reply: the tool call's argument when one came, else the text parts
+	finish  string
+	usage   map[string]int
+	viaTool bool // the reply came through the transport function
+	stray   int  // characters of plain text that arrived beside a tool call
+}
+
+// readStream reads the service's SSE events. Text parts are appended and
+// reported as they come; a call to the transport function replaces them
+// with its argument, since that call is the whole reply and arrives at once.
+func readStream(r io.Reader, tool *backend.Transport, onPhase func(phase, note string), onText func(soFar string)) (streamResult, error) {
 	var text strings.Builder
-	usage := map[string]int{}
-	finish := ""
+	var toolText string
+	st := streamResult{usage: map[string]int{}}
 	generating := false
-	sc := bufio.NewScanner(resp.Body)
+	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 1024*1024), 64*1024*1024)
 	for sc.Scan() {
 		line := sc.Text()
@@ -504,8 +600,12 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
 				Candidates []struct {
 					Content struct {
 						Parts []struct {
-							Text    string `json:"text"`
-							Thought bool   `json:"thought"`
+							Text         string `json:"text"`
+							Thought      bool   `json:"thought"`
+							FunctionCall *struct {
+								Name string         `json:"name"`
+								Args map[string]any `json:"args"`
+							} `json:"functionCall"`
 						} `json:"parts"`
 					} `json:"content"`
 					FinishReason string `json:"finishReason"`
@@ -523,50 +623,50 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
 		}
 		for _, cand := range ev.Response.Candidates {
 			for _, p := range cand.Content.Parts {
+				if p.FunctionCall != nil && tool != nil && p.FunctionCall.Name == tool.Name {
+					if s, ok := p.FunctionCall.Args[tool.Param].(string); ok {
+						toolText += s
+						st.viaTool = true
+						if !generating {
+							generating = true
+							if onPhase != nil {
+								onPhase("generating", "")
+							}
+						}
+						if onText != nil {
+							onText(toolText)
+						}
+					}
+					continue
+				}
 				if p.Thought || p.Text == "" {
 					continue
 				}
 				if !generating {
 					generating = true
-					if c.OnPhase != nil {
-						c.OnPhase("generating", "")
+					if onPhase != nil {
+						onPhase("generating", "")
 					}
 				}
 				text.WriteString(p.Text)
-				if c.OnText != nil {
-					c.OnText(text.String())
+				if onText != nil && !st.viaTool {
+					onText(text.String())
 				}
 			}
 			if cand.FinishReason != "" {
-				finish = cand.FinishReason
+				st.finish = cand.FinishReason
 			}
 		}
 		if u := ev.Response.UsageMetadata; u.Total > 0 {
-			usage["input_tokens"], usage["output_tokens"], usage["thinking_tokens"], usage["total_tokens"] = u.Prompt, u.Candidates, u.Thoughts, u.Total
+			st.usage["input_tokens"], st.usage["output_tokens"], st.usage["thinking_tokens"], st.usage["total_tokens"] = u.Prompt, u.Candidates, u.Thoughts, u.Total
 		}
 	}
-	if err := sc.Err(); err != nil && text.Len() == 0 {
-		if ctx.Err() == context.Canceled {
-			if text.Len() > 0 {
-				return backend.Result{Text: text.String(), Status: "STOPPED"}, nil
-			}
-			return backend.Result{}, fmt.Errorf("stopped by request")
-		}
-		return backend.Result{}, fmt.Errorf("stream: %v", err)
+	if st.viaTool {
+		st.text, st.stray = toolText, backend.Chars(text.String())
+	} else {
+		st.text = text.String()
 	}
-	if ctx.Err() == context.Canceled && text.Len() > 0 {
-		return backend.Result{Text: text.String(), Status: "STOPPED"}, nil
-	}
-	a.logf("agyapi: %s %s finished in %.1fs, %d chars, finish=%s", c.ID, model, time.Since(t0).Seconds(), backend.Chars(text.String()), finish)
-	status := "SUCCESS"
-	if finish != "" && finish != "STOP" {
-		status = finish
-	}
-	out := text.String()
-	if out == "" && finish != "" && finish != "STOP" {
-		out = fmt.Sprintf("[openmini/agyapi] the model returned no text (finish reason %s)", finish)
-	}
-	return backend.Result{Text: out, Status: status, Usage: usage}, nil
+	return st, sc.Err()
 }
 
 // Usage returns the quota buckets from retrieveUserQuota.

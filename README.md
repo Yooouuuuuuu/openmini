@@ -96,6 +96,14 @@ netsh advfirewall firewall delete rule name="openmini"
   agyapi (the default), `web` sends it to the web backend as a file, `warn` lets agy cut it and notes that, `fail`
   refuses it. A reroute keeps the model that was asked for (on web, the same family: `gemini-3.8-flash-low`
   becomes `3.8 Flash`); if the other backend has no such model, the request fails instead of running on another.
+- **Tool transport** (`tool_transport = true` in `[agyapi]`, off by default). Google's output filter sometimes cuts
+  a plain-text reply mid-way (finish reason `PROHIBITED_CONTENT`). With the switch on, agyapi declares one reply
+  function, makes the model answer by calling it, and hands you the argument as the reply. Text delivered that way
+  is not cut the same way. If the request itself carries such a function, a single tool with one string argument
+  as anti-truncation presets send, that one is used instead of openmini's own, so the model sees one instruction.
+  The reply arrives in one piece at the end, so a streaming client sees nothing until it is complete. With the
+  switch off, tool definitions in a request are ignored as before. Independently, agyapi retries once
+  (`retries`) when the model returns nothing or a malformed function call.
 - **Temporary chats.** Every web request starts as a Gemini temporary chat, so nothing openmini sends is kept in
   the account's history or used as context for later chats. `temporary_chat = false` in `[web]` turns that off.
 - **History.** `[history] enabled = true` writes one JSON file per request to `data/history`, named

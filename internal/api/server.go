@@ -646,6 +646,46 @@ type chatRequest struct {
 	Model    string        `json:"model"`
 	Messages []chatMessage `json:"messages"`
 	Stream   bool          `json:"stream"`
+	Tools    []chatTool    `json:"tools"`
+}
+
+type chatTool struct {
+	Type     string `json:"type"`
+	Function struct {
+		Name        string          `json:"name"`
+		Description string          `json:"description"`
+		Parameters  json.RawMessage `json:"parameters"`
+	} `json:"function"`
+}
+
+// transportTool recognises a request whose only tool is a reply function:
+// one function taking exactly one string argument. Anti-truncation presets
+// send such a tool and tell the model to answer through it; a backend with
+// the tool transport declares it instead of its own. Anything else (real
+// tools, several tools) is nil: openmini does not run tools.
+func transportTool(tools []chatTool) *backend.Transport {
+	if len(tools) != 1 || (tools[0].Type != "function" && tools[0].Type != "") {
+		return nil
+	}
+	f := tools[0].Function
+	if f.Name == "" {
+		return nil
+	}
+	var params struct {
+		Properties map[string]struct {
+			Type string `json:"type"`
+		} `json:"properties"`
+	}
+	if json.Unmarshal(f.Parameters, &params) != nil || len(params.Properties) != 1 {
+		return nil
+	}
+	for name, p := range params.Properties {
+		if p.Type != "string" {
+			return nil
+		}
+		return &backend.Transport{Name: f.Name, Description: f.Description, Param: name}
+	}
+	return nil
 }
 
 func contentText(raw json.RawMessage) string {
@@ -858,7 +898,7 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 		}
 	}
 
-	call := backend.Call{ID: id, Ctx: ctx, Model: model, Prompt: full, Context: promptContext, LastUser: lastUser}
+	call := backend.Call{ID: id, Ctx: ctx, Model: model, Prompt: full, Context: promptContext, LastUser: lastUser, Transport: transportTool(req.Tools)}
 	finish := func(res backend.Result, err error, t0 time.Time) string {
 		reply := res.Text
 		phase := state.Finished

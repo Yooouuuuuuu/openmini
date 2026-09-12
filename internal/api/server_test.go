@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -65,5 +66,34 @@ func TestRefusingKeepsNameFailsComplete(t *testing.T) {
 	}
 	if _, err := r.Complete(backend.Call{}); err != want {
 		t.Fatalf("Complete err = %v", err)
+	}
+}
+
+func TestTransportTool(t *testing.T) {
+	parse := func(body string) []chatTool {
+		var r chatRequest
+		if err := json.Unmarshal([]byte(body), &r); err != nil {
+			t.Fatal(err)
+		}
+		return r.Tools
+	}
+	// The shape an anti-truncation preset sends.
+	emit := `{"tools":[{"type":"function","function":{"name":"emit_complete_response_dde83b1754d651a0126a96c3","description":"Emit the complete final reply.","parameters":{"type":"object","properties":{"content":{"type":"string"}},"required":["content"]}}}],"tool_choice":"auto"}`
+	got := transportTool(parse(emit))
+	want := &backend.Transport{Name: "emit_complete_response_dde83b1754d651a0126a96c3", Description: "Emit the complete final reply.", Param: "content"}
+	if got == nil || *got != *want {
+		t.Errorf("emit tool: got %+v, want %+v", got, want)
+	}
+	for name, body := range map[string]string{
+		"no tools":      `{"tools":[]}`,
+		"absent":        `{"model":"x"}`,
+		"two tools":     `{"tools":[{"type":"function","function":{"name":"a","parameters":{"type":"object","properties":{"content":{"type":"string"}}}}},{"type":"function","function":{"name":"b","parameters":{"type":"object","properties":{"q":{"type":"string"}}}}}]}`,
+		"two params":    `{"tools":[{"type":"function","function":{"name":"search","parameters":{"type":"object","properties":{"q":{"type":"string"},"n":{"type":"integer"}}}}}]}`,
+		"non-string":    `{"tools":[{"type":"function","function":{"name":"count","parameters":{"type":"object","properties":{"n":{"type":"integer"}}}}}]}`,
+		"no parameters": `{"tools":[{"type":"function","function":{"name":"ping"}}]}`,
+	} {
+		if got := transportTool(parse(body)); got != nil {
+			t.Errorf("%s: got %+v, want nil", name, got)
+		}
 	}
 }

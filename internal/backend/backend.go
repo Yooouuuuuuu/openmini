@@ -64,6 +64,11 @@ type Call struct {
 	// MaxTokens caps the reply when > 0 (used for cheap probes). Backends
 	// that cannot honour it ignore it.
 	MaxTokens int
+	// Transport is a reply function the client itself declared (a single
+	// tool with one string argument, as anti-truncation presets send). A
+	// backend using the tool transport declares this one instead of its
+	// own, so the model sees one consistent instruction. Nil when none.
+	Transport *Transport
 	// OnText receives the reply text so far (cumulative), as it streams. May be nil.
 	OnText func(soFar string)
 	// OnPhase reports "submitted" and "generating" with an optional note. May be nil.
@@ -90,6 +95,14 @@ type Backend interface {
 	Complete(c Call) (Result, error)
 	// Usage returns backend-specific quota information, or an explanation.
 	Usage() (any, error)
+}
+
+// Transport describes the reply function of the tool transport: the model
+// is made to answer by calling it, and the value of Param is the reply.
+type Transport struct {
+	Name        string
+	Description string
+	Param       string
 }
 
 // Accepter is implemented by a backend that serves ids beyond the ones it
