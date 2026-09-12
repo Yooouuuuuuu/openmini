@@ -28,7 +28,7 @@ import (
 	"openmini/internal/logging"
 )
 
-const version = "0.5.2"
+const version = "0.5.3"
 
 var cfgPath string
 

@@ -1,11 +1,11 @@
 {
   "RT_GROUP_ICON": { "APP": { "0000": ["icon.png"] } },
   "RT_VERSION": { "#1": { "0000": {
-    "fixed": { "file_version": "0.5.2.0", "product_version": "0.5.2.0" },
+    "fixed": { "file_version": "0.5.3.0", "product_version": "0.5.3.0" },
     "info": { "0409": {
       "CompanyName": "openmini",
       "FileDescription": "openmini: your Google AI Pro subscription as OpenAI-compatible endpoints",
-      "FileVersion": "0.5.2", "InternalName": "openmini", "OriginalFilename": "openmini.exe",
-      "ProductName": "openmini", "ProductVersion": "0.5.2", "LegalCopyright": ""
+      "FileVersion": "0.5.3", "InternalName": "openmini", "OriginalFilename": "openmini.exe",
+      "ProductName": "openmini", "ProductVersion": "0.5.3", "LegalCopyright": ""
     } } } } }
 }
