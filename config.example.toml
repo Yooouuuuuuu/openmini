@@ -14,6 +14,23 @@ timeout = 0
 # is valid JSON, but leave this at 0 unless you need it.
 keepalive = 0
 
+[extra]
+# Behaviors beyond a plain proxy. All off by default; turn on what you want.
+
+# Tool transport (agyapi): the model is made to answer by calling one function
+# and the reply is taken from its argument. Text delivered this way escapes the
+# cuts plain text gets from the output filter (PROHIBITED_CONTENT mid-reply).
+# If the request itself carries such a function (a single tool with one string
+# argument, as anti-truncation presets send), that one is used; otherwise
+# openmini declares its own and adds one sentence at the end of the prompt
+# asking for it. The reply arrives in one piece at the end, so streaming
+# clients see nothing until it is complete.
+tool_transport = false
+# Extra attempts when the model returns nothing, a malformed function call, or
+# ignored the declared function and had its plain text cut. A cut plain-text
+# reply with the transport off is not retried. Default 1.
+# retries = 1
+
 [models]
 # What /v1/models offers: one entry per model, at this thinking level where a
 # model comes in low/medium/high, minus the hide list. Everything a backend
@@ -131,16 +148,3 @@ official_prompt = false
 system_instruction = ""
 # Requests agyapi runs at once. Default 10.
 # parallel = 10
-# Tool transport: the model is made to answer by calling one function and the
-# reply is taken from its argument. Text delivered this way escapes the cuts
-# plain text gets from the output filter (PROHIBITED_CONTENT mid-reply). If
-# the request itself carries such a function (a single tool with one string
-# argument, as anti-truncation presets send), that one is used; otherwise
-# openmini declares its own and adds one sentence at the end of the prompt
-# asking for it. The reply arrives in one piece at the end, so streaming
-# clients see nothing until it is complete.
-tool_transport = false
-# Extra attempts when the model returns nothing, a malformed function call,
-# or ignored the declared function and had its plain text cut by the filter.
-# A cut plain-text reply with the transport off is not retried. Default 1.
-# retries = 1

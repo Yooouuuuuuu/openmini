@@ -18,6 +18,16 @@ type Config struct {
 	AgyAPI  AgyAPI  `toml:"agyapi"`
 	Models  Models  `toml:"models"`
 	History History `toml:"history"`
+	Extra   Extra   `toml:"extra"`
+}
+
+// Extra holds behaviors beyond a plain proxy: the tool transport and
+// empty-reply retries (agyapi). tool_transport and retries lived in [agyapi]
+// before 0.6.2; an old setting there is still honored when [extra] does not
+// override it.
+type Extra struct {
+	ToolTransport bool `toml:"tool_transport"`
+	Retries       int  `toml:"retries"`
 }
 
 // History keeps one JSON file per request: the request body as received,
@@ -111,7 +121,17 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
-	if !md.IsDefined("agyapi", "retries") {
+	// tool_transport and retries moved from [agyapi] to [extra] in 0.6.2; an
+	// [agyapi] setting is still honored when [extra] does not override it.
+	if md.IsDefined("extra", "tool_transport") {
+		c.AgyAPI.ToolTransport = c.Extra.ToolTransport
+	}
+	switch {
+	case md.IsDefined("extra", "retries"):
+		c.AgyAPI.Retries = c.Extra.Retries
+	case md.IsDefined("agyapi", "retries"):
+		// keep the value decoded from [agyapi]
+	default:
 		c.AgyAPI.Retries = 1
 	}
 	c.applyDefaults()
@@ -227,6 +247,23 @@ timeout = 0
 # a client that has gone away is noticed and its request stopped. The space
 # is valid JSON, but leave this at 0 unless you need it.
 keepalive = 0
+
+[extra]
+# Behaviors beyond a plain proxy. All off by default; turn on what you want.
+
+# Tool transport (agyapi): the model is made to answer by calling one function
+# and the reply is taken from its argument. Text delivered this way escapes the
+# cuts plain text gets from the output filter (PROHIBITED_CONTENT mid-reply).
+# If the request itself carries such a function (a single tool with one string
+# argument, as anti-truncation presets send), that one is used; otherwise
+# openmini declares its own and adds one sentence at the end of the prompt
+# asking for it. The reply arrives in one piece at the end, so streaming
+# clients see nothing until it is complete.
+tool_transport = false
+# Extra attempts when the model returns nothing, a malformed function call, or
+# ignored the declared function and had its plain text cut. A cut plain-text
+# reply with the transport off is not retried. Default 1.
+# retries = 1
 
 [models]
 # What /v1/models offers: one entry per model, at this thinking level where a
@@ -345,17 +382,4 @@ official_prompt = false
 system_instruction = ""
 # Requests agyapi runs at once. Default 10.
 # parallel = 10
-# Tool transport: the model is made to answer by calling one function and the
-# reply is taken from its argument. Text delivered this way escapes the cuts
-# plain text gets from the output filter (PROHIBITED_CONTENT mid-reply). If
-# the request itself carries such a function (a single tool with one string
-# argument, as anti-truncation presets send), that one is used; otherwise
-# openmini declares its own and adds one sentence at the end of the prompt
-# asking for it. The reply arrives in one piece at the end, so streaming
-# clients see nothing until it is complete.
-tool_transport = false
-# Extra attempts when the model returns nothing, a malformed function call,
-# or ignored the declared function and had its plain text cut by the filter.
-# A cut plain-text reply with the transport off is not retried. Default 1.
-# retries = 1
 `
