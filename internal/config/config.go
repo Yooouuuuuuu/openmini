@@ -21,13 +21,13 @@ type Config struct {
 	Extra   Extra   `toml:"extra"`
 }
 
-// Extra holds behaviors beyond a plain proxy: the tool transport and
-// empty-reply retries (agyapi). tool_transport and retries lived in [agyapi]
-// before 0.6.2; an old setting there is still honored when [extra] does not
-// override it.
+// Extra holds behaviors beyond a plain proxy, both for the agyapi backend:
+// anti-truncation (deliver the reply through a function call so it escapes the
+// output filter's mid-reply cuts) and empty-reply retries. These may also sit
+// under [agyapi]; an [extra] value wins.
 type Extra struct {
-	ToolTransport bool `toml:"tool_transport"`
-	Retries       int  `toml:"retries"`
+	AntiTruncation bool `toml:"anti_truncation"`
+	Retries        int  `toml:"retries"`
 }
 
 // History keeps one JSON file per request: the request body as received,
@@ -110,7 +110,7 @@ type AgyAPI struct {
 	OfficialPrompt    bool     `toml:"official_prompt"`    // send the Antigravity identity snippet as the first system part
 	SystemInstruction string   `toml:"system_instruction"` // optional instruction of your own, sent after it
 	ProbeModel        string   `toml:"probe_model"`        // cheap model used by /tools/policy-bisect
-	ToolTransport     bool     `toml:"tool_transport"`     // make the model answer through a function call and unwrap it
+	AntiTruncation    bool     `toml:"anti_truncation"`    // answer through a function call and unwrap it, to dodge the output filter's mid-reply cuts
 	Retries           int      `toml:"retries"`            // extra attempts when a reply is empty or a malformed function call; default 1
 }
 
@@ -121,10 +121,10 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
-	// tool_transport and retries moved from [agyapi] to [extra] in 0.6.2; an
-	// [agyapi] setting is still honored when [extra] does not override it.
-	if md.IsDefined("extra", "tool_transport") {
-		c.AgyAPI.ToolTransport = c.Extra.ToolTransport
+	// anti_truncation and retries can sit in [extra] or [agyapi]; an [extra]
+	// setting wins, an [agyapi] one is honored when [extra] is silent.
+	if md.IsDefined("extra", "anti_truncation") {
+		c.AgyAPI.AntiTruncation = c.Extra.AntiTruncation
 	}
 	switch {
 	case md.IsDefined("extra", "retries"):
@@ -251,18 +251,19 @@ keepalive = 0
 [extra]
 # Behaviors beyond a plain proxy. All off by default; turn on what you want.
 
-# Tool transport (agyapi): the model is made to answer by calling one function
-# and the reply is taken from its argument. Text delivered this way escapes the
-# cuts plain text gets from the output filter (PROHIBITED_CONTENT mid-reply).
-# If the request itself carries such a function (a single tool with one string
+# Anti-truncation (agyapi): make the model answer by calling one function and
+# take the reply from its argument. Text delivered this way escapes the cuts
+# plain text gets from the output filter (PROHIBITED_CONTENT mid-reply). If the
+# request itself carries such a function (a single tool with one string
 # argument, as anti-truncation presets send), that one is used; otherwise
 # openmini declares its own and adds one sentence at the end of the prompt
-# asking for it. The reply arrives in one piece at the end, so streaming
-# clients see nothing until it is complete.
-tool_transport = false
+# asking for it. The reply arrives in one piece at the end, so streaming clients
+# see nothing until it is complete. Off by default (the function-call reply is
+# less natural than plain streamed text).
+anti_truncation = false
 # Extra attempts when the model returns nothing, a malformed function call, or
 # ignored the declared function and had its plain text cut. A cut plain-text
-# reply with the transport off is not retried. Default 1.
+# reply with anti_truncation off is not retried. Default 1.
 # retries = 1
 
 [models]

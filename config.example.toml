@@ -17,18 +17,19 @@ keepalive = 0
 [extra]
 # Behaviors beyond a plain proxy. All off by default; turn on what you want.
 
-# Tool transport (agyapi): the model is made to answer by calling one function
-# and the reply is taken from its argument. Text delivered this way escapes the
-# cuts plain text gets from the output filter (PROHIBITED_CONTENT mid-reply).
-# If the request itself carries such a function (a single tool with one string
+# Anti-truncation (agyapi): make the model answer by calling one function and
+# take the reply from its argument. Text delivered this way escapes the cuts
+# plain text gets from the output filter (PROHIBITED_CONTENT mid-reply). If the
+# request itself carries such a function (a single tool with one string
 # argument, as anti-truncation presets send), that one is used; otherwise
 # openmini declares its own and adds one sentence at the end of the prompt
-# asking for it. The reply arrives in one piece at the end, so streaming
-# clients see nothing until it is complete.
-tool_transport = false
+# asking for it. The reply arrives in one piece at the end, so streaming clients
+# see nothing until it is complete. Off by default (the function-call reply is
+# less natural than plain streamed text).
+anti_truncation = false
 # Extra attempts when the model returns nothing, a malformed function call, or
 # ignored the declared function and had its plain text cut. A cut plain-text
-# reply with the transport off is not retried. Default 1.
+# reply with anti_truncation off is not retried. Default 1.
 # retries = 1
 
 [models]

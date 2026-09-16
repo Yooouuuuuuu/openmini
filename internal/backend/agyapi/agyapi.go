@@ -440,7 +440,7 @@ func (a *AgyAPI) Complete(c backend.Call) (backend.Result, error) {
 	a.sem <- struct{}{}
 	defer func() { <-a.sem }()
 	var tool *backend.Transport
-	if a.cfg.ToolTransport && c.MaxTokens == 0 { // probes (MaxTokens) stay plain text
+	if a.cfg.AntiTruncation && c.MaxTokens == 0 { // probes (MaxTokens) stay plain text
 		t := defaultTransport
 		if c.Transport != nil {
 			t = *c.Transport

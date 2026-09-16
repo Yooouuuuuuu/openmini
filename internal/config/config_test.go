@@ -16,14 +16,14 @@ func write(t *testing.T, content string) string {
 	return p
 }
 
-func TestExtraTransport(t *testing.T) {
-	// [extra] tool_transport turns it on; retries defaults to 1.
-	c, err := Load(write(t, "[extra]\ntool_transport = true\n"))
+func TestExtraAntiTruncation(t *testing.T) {
+	// [extra] anti_truncation turns it on; retries defaults to 1.
+	c, err := Load(write(t, "[extra]\nanti_truncation = true\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.AgyAPI.ToolTransport {
-		t.Errorf("tool_transport from [extra] not applied")
+	if !c.AgyAPI.AntiTruncation {
+		t.Errorf("anti_truncation from [extra] not applied")
 	}
 	if c.AgyAPI.Retries != 1 {
 		t.Errorf("retries default = %d, want 1", c.AgyAPI.Retries)
