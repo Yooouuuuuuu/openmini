@@ -28,7 +28,7 @@ import (
 	"openmini/internal/logging"
 )
 
-const version = "0.6.3"
+const version = "0.6.4"
 
 var cfgPath string
 
@@ -146,6 +146,7 @@ func serveCmd() *gcli.Command {
 					logger.Printf("agy backend: %v (enabled, but not ready)", err)
 				} else {
 					logger.Printf("agy: %d models", len(a.Models()))
+					warnDefault(logger, "agy", a, cfg.Agy.Model)
 				}
 				backends["agy"] = a
 			}
@@ -155,6 +156,7 @@ func serveCmd() *gcli.Command {
 					logger.Printf("agyapi backend: %v (enabled, but not ready)", err)
 				} else {
 					logger.Printf("agyapi: %d models", len(x.Models()))
+					warnDefault(logger, "agyapi", x, cfg.AgyAPI.Model)
 				}
 				backends["agyapi"] = x
 			}
@@ -177,6 +179,24 @@ func serveCmd() *gcli.Command {
 			return srv.Listen()
 		},
 	}
+}
+
+// warnDefault logs when a backend's configured default model is not in the
+// list the service gives today, so a model the service retires shows up at
+// startup instead of as failing requests.
+func warnDefault(logger *logging.Logger, name string, b backend.Backend, model string) {
+	if model == "" {
+		return
+	}
+	for _, m := range b.Models() {
+		if strings.EqualFold(m, model) {
+			return
+		}
+	}
+	if a, ok := b.(backend.Accepter); ok && a.Accepts(model) {
+		return
+	}
+	logger.Printf("%s: warning: the default model %q is not offered any more; requests that name no model will fail. Pick one of %v for [%s] model", name, model, b.Models(), name)
 }
 
 func serverGet(path string) (string, error) {
