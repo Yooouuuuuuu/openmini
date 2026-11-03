@@ -4,7 +4,6 @@ package main
 import (
 	"openmini/internal/proc"
 	"openmini/internal/ui"
-	"time"
 
 	"bufio"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -26,9 +26,10 @@ import (
 	"openmini/internal/backend/web"
 	"openmini/internal/config"
 	"openmini/internal/logging"
+	"openmini/internal/setup"
 )
 
-const version = "0.6.4"
+const version = "0.6.5"
 
 var cfgPath string
 
@@ -44,7 +45,18 @@ func main() {
 	ran := ""
 	if plain {
 		if _, err := os.Stat("config.toml"); err != nil {
-			ran = "setup" // first run: the wizard
+			// first run: openmini-setup does the checks and sign-ins
+			if s := setupExe(); s != "" {
+				cmd := exec.Command(s)
+				cmd.Dir = filepath.Dir(s)
+				cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+				if err := cmd.Run(); err != nil {
+					fmt.Println("openmini-setup:", err)
+					os.Exit(1)
+				}
+				os.Exit(0)
+			}
+			ran = "setup" // no openmini-setup next to this exe: the same checks in-process
 		} else {
 			ran = "serve"
 		}
@@ -53,29 +65,11 @@ func main() {
 	app.ExitOnEnd = false
 	code := app.Run(nil)
 	if plain && runtime.GOOS == "windows" && !spawnedWindow { // a double-clicked console: say what happened and keep it open
-		in := bufio.NewReader(os.Stdin)
-		switch {
-		case ran == "setup" && code == 0:
-			fmt.Println()
-			if ask(in, "Start openmini now?", true) {
-				exe, _ := os.Executable()
-				serve := exec.Command(exe, "serve")
-				serve.Stdin, serve.Stdout, serve.Stderr = os.Stdin, os.Stdout, os.Stderr
-				t0 := time.Now()
-				serve.Run()
-				if time.Since(t0) < 10*time.Second {
-					fmt.Println("\nopenmini is running in its own window. This window can be closed.")
-				} else {
-					fmt.Println("\nopenmini has stopped.")
-				}
-			} else {
-				fmt.Println("\nSetup is finished. Double-click openmini.exe whenever you want to start openmini.")
-			}
-		case ran == "serve":
+		if ran == "serve" {
 			fmt.Println("\nopenmini has stopped.")
 		}
 		fmt.Print("Press Enter to close this window. ")
-		in.ReadString('\n')
+		bufio.NewReader(os.Stdin).ReadString('\n')
 	}
 	os.Exit(code)
 }
@@ -244,7 +238,7 @@ func initCmd() *gcli.Command {
 			if err := config.WriteTemplate(cfgPath); err != nil {
 				return err
 			}
-			fmt.Printf("wrote %s; edit it, then run %s\n", cfgPath, startHint())
+			fmt.Printf("wrote %s; edit it, then run %s\n", cfgPath, setup.StartHint())
 			return nil
 		},
 	}

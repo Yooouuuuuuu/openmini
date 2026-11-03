@@ -19,14 +19,16 @@ nothing and adds nothing; it uses what your subscription already gives you.
 
 1. Download `openmini-<version>-windows-amd64.zip` from Releases and unzip it into a folder of your own, not
    Downloads. Everything openmini writes stays in that folder.
-2. Double-click `openmini.exe`. Windows flags the unsigned exe: choose "More info", then "Run anyway". The first
-   time, this runs the setup wizard, not the server:
-   - **Antigravity.** If Google's Antigravity CLI (`agy`) is missing, it offers to run Google's installer, then to
-     sign you in; a browser opens for that.
-   - **Gemini web app.** Say yes and it downloads a browser once (about 150 MB) and opens a window for you to sign
-     in to Google. The session is kept in `data\browser-profile`.
-   - A desktop shortcut and a Start menu entry, if you want them.
-   - At the end it offers to start openmini right away.
+2. Double-click **`openmini-setup.exe`**. Windows flags the unsigned exe: choose "More info", then "Run anyway".
+   Setup checks what openmini needs and asks only about what is missing:
+   - **agy** (Google's Antigravity CLI, for the agy and agyapi backends): install it with Google's installer?
+     Sign in? A browser opens for the sign-in. Setup also writes the text-only `storyteller` agent agy runs.
+   - **Gemini web app** (the web backend): download the browser (about 150 MB, once)? Sign in to Google? A window
+     opens for it; the session is kept in `data\browser-profile`.
+   - A desktop shortcut and a Start menu entry, the first time.
+   - At the end it offers to start openmini.
+
+   Whatever is not ready stays switched off in `config.toml`; run setup again later to finish it.
 3. From then on, double-clicking `openmini.exe` (or the shortcut) starts the server. Windows Firewall asks once;
    allow it if other devices should reach it. The dashboard is at <http://localhost:18765/usage>, the API at
    `http://localhost:18765/v1`. To try it from PowerShell:
@@ -43,11 +45,14 @@ Minimise hides it to the notification area: click the tray icon to bring it back
 
 To stop it, close the window (the `x`), pick Quit from the tray menu, or run `openmini stop` in PowerShell.
 
-`openmini doctor` checks everything, `openmini login` redoes the Gemini sign-in, `openmini setup` runs the wizard again.
+**A sign-in has lapsed** (the dashboard or the log says a backend is not signed in): double-click
+`openmini-setup.exe` again. It offers to stop the running openmini (it holds the browser profile), checks both
+sign-ins, asks to redo only the one that is missing, and offers to start openmini again. Nothing that already works
+is touched. `openmini doctor` checks everything without changing anything.
 
 ### Update
 
-Download the new zip, stop openmini, replace `openmini.exe`, start it again. `config.toml` and the
+Download the new zip, stop openmini, replace `openmini.exe` and `openmini-setup.exe`, start it again. `config.toml` and the
 `data` folder (your Gemini sign-in, agy's state, history) stay as they are; `config.example.toml` in the zip shows
 any new settings, which all have working defaults when absent.
 

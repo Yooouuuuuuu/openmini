@@ -1,0 +1,11 @@
+{
+  "RT_GROUP_ICON": { "APP": { "0000": ["icon.png"] } },
+  "RT_VERSION": { "#1": { "0000": {
+    "fixed": { "file_version": "0.6.5.0", "product_version": "0.6.5.0" },
+    "info": { "0409": {
+      "CompanyName": "openmini",
+      "FileDescription": "openmini setup: checks agy and the Gemini web app and signs in where needed",
+      "FileVersion": "0.6.5", "InternalName": "openmini-setup", "OriginalFilename": "openmini-setup.exe",
+      "ProductName": "openmini", "ProductVersion": "0.6.5", "LegalCopyright": ""
+    } } } } }
+}

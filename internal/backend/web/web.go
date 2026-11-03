@@ -173,7 +173,7 @@ func (w *Web) Ready() error {
 		return fmt.Errorf("browser not started")
 	}
 	if !w.signedIn {
-		return fmt.Errorf("browser is not signed in to Google; start with headless = false and sign in once")
+		return fmt.Errorf("browser is not signed in to Google; run openmini-setup to sign in again")
 	}
 	return nil
 }
@@ -351,7 +351,7 @@ func (w *Web) Start() error {
 	w.started = true
 	w.signedIn = w.exists(w.page.Locator(signedInSel))
 	if !w.signedIn {
-		w.logf("web: not signed in; profile %s. Set headless = false, restart, sign in once in the window.", profileDir)
+		w.logf("web: not signed in; profile %s. Run openmini-setup to sign in again.", profileDir)
 		return nil
 	}
 	w.readPickerAtStart("web")
@@ -993,7 +993,7 @@ func (w *Web) newChat(c backend.Call) error {
 	if err := box.WaitFor(pw.LocatorWaitForOptions{State: pw.WaitForSelectorStateVisible, Timeout: w.waitMillis()}); err != nil {
 		if !w.exists(w.page.Locator(signedInSel)) {
 			w.signedIn = false
-			return fmt.Errorf("the browser is no longer signed in to Google; set headless = false, restart, and sign in once")
+			return fmt.Errorf("the browser is no longer signed in to Google; run openmini-setup to sign in again")
 		}
 		return fmt.Errorf("prompt box did not appear within %s", pageWait)
 	}
