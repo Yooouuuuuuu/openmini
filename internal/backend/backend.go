@@ -4,11 +4,13 @@ package backend
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"openmini/internal/proc"
@@ -51,6 +53,49 @@ func FindAgy(bin string) string {
 func PrepareAgy(cmd *exec.Cmd) {
 	proc.Quiet(cmd)
 	cmd.Env = append(os.Environ(), "AGY_CLI_DISABLE_AUTO_UPDATE=true")
+}
+
+// QuotaRow is one line of a quota meter: a pool (model group), its window,
+// what is left, and when it resets.
+type QuotaRow struct {
+	Pool      string `json:"pool"`
+	Window    string `json:"window"`
+	Remaining string `json:"remaining"`
+	ResetsAt  string `json:"resets_at,omitempty"`
+	ResetsIn  string `json:"resets_in,omitempty"`
+}
+
+// AgyUsage runs agy's /usage and parses its tab-separated lines. agy and
+// agyapi share one Antigravity quota, and the CLI's view is the complete one:
+// the service's quota summary leaves model groups out for other clients.
+func AgyUsage(bin, dir string) ([]QuotaRow, error) {
+	cmd := exec.Command(bin, "--print", "/usage", "--output-format", "text")
+	PrepareAgy(cmd)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil && len(out) == 0 {
+		return nil, err
+	}
+	var rows []QuotaRow
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		f := strings.Split(strings.TrimRight(line, "\r"), "\t")
+		if len(f) < 3 {
+			continue
+		}
+		r := QuotaRow{Pool: f[0], Window: f[1], Remaining: f[2]}
+		if len(f) >= 4 {
+			r.ResetsAt = f[3]
+			if t, err := time.Parse(time.RFC3339, f[3]); err == nil {
+				r.ResetsIn = time.Until(t).Round(time.Minute).String()
+			}
+		}
+		rows = append(rows, r)
+	}
+	if len(rows) == 0 {
+		first, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+		return nil, fmt.Errorf("unexpected /usage output: %s", first)
+	}
+	return rows, nil
 }
 
 // Call is one prompt for a backend.

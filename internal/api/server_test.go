@@ -97,3 +97,17 @@ func TestTransportTool(t *testing.T) {
 		}
 	}
 }
+
+func TestOfferedListsOriginalNames(t *testing.T) {
+	b := fake{"agyapi", []string{"gemini-3.8-flash-low", "gemini-3.8-flash-high", "claude-opus-5-5-high"}}
+	names, _ := offered(b)
+	if len(names) != 3 || names[0] != "gemini-3.8-flash-low" || names[1] != "gemini-3.8-flash-high" {
+		t.Errorf("offered = %v, want every id as the backend names it", names)
+	}
+	if got := lookup(b, "GEMINI-3.8-FLASH-HIGH"); got != "gemini-3.8-flash-high" {
+		t.Errorf("lookup ignores case: got %q", got)
+	}
+	if got := lookup(b, "gemini-9-ultra"); got != "gemini-9-ultra" {
+		t.Errorf("unknown names pass through to the backend: got %q", got)
+	}
+}

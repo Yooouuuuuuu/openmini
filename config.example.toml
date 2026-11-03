@@ -32,13 +32,6 @@ anti_truncation = false
 # reply with anti_truncation off is not retried. Default 1.
 # retries = 1
 
-[models]
-# What /v1/models offers: one entry per model, at this thinking level where a
-# model comes in low/medium/high, minus the hide list. Everything a backend
-# really has is on /all/v1 (the same endpoints with the full list).
-level = "low"
-hide = ["延伸思考", "gemini-pro-agent"]
-
 [log]
 directory = "./logs"
 # One file per day; older files are deleted. The log never contains prompt or
@@ -108,7 +101,7 @@ enabled = true
 binary = "agy" # name on the PATH or a full path; the install folder is tried too
 agent = "storyteller"
 mode = "plan"
-model = "gemini-3.1-pro-low"
+model = "gemini-3.8-flash-low"
 effort = ""
 workspace = "./data/agy-workspace"
 # Requests agy runs at once; a burst overlaps instead of queueing. Default 10.
@@ -137,8 +130,8 @@ ide_type = "ANTIGRAVITY"
 # production host cloudcode-pa.googleapis.com answers 429 for generation.
 endpoint = "https://daily-cloudcode-pa.googleapis.com"
 # project = ""    # normally resolved automatically
-# Default model id, as listed by the service (agy's slugs, e.g. gemini-3.1-pro-low).
-model = "gemini-3.1-pro-low"
+# Default model id, as listed by the service (agy's slugs, e.g. gemini-3.8-flash-low).
+model = "gemini-3.8-flash-low"
 # Subscription entitlement the requests draw on. GOOGLE_ONE_AI is the Google AI
 # Pro/Ultra plan; set to [] to send none.
 credit_types = ["GOOGLE_ONE_AI"]

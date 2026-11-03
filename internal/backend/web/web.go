@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -32,6 +33,10 @@ const (
 	modelLabelSel = "[data-test-id='logo-pill-label-container'] .picker-primary-text"
 	signedInSel   = "[gem-open-account-menu]"
 	tempChatSel   = "temp-chat-button button" // the "temporary chat" toggle on a fresh chat
+	// the settings menu: the gear by the account name (late 2026) or the old
+	// help-and-settings button; labels match exactly, since a chat title in the
+	// sidebar can contain the word too
+	settingsSel = "[data-test-id='settings-and-help-button'], button:has([data-mat-icon-name='settings']), button[aria-label='設定'], button[aria-label='Settings']"
 
 	deadReplyAfter = 45 * time.Second
 
@@ -114,6 +119,8 @@ type Web struct {
 	modeOptions []string // picker entries that are switches on top of a model (extended thinking)
 
 	activeModes []string          // the switches currently on
+	levels      []string          // thinking levels from the picker's submenu (思考程度: 低, 中等, 高), in order
+	level       string            // the level currently selected
 	unavailable []string          // picker entries currently disabled (usage limit reached)
 	entryNotes  map[string]string // description text shown under a picker entry (e.g. reset hint)
 	usageCache  map[string]any
@@ -124,6 +131,9 @@ type Web struct {
 	reqID      string // request in flight, for stream timing logs
 	reqStart   time.Time
 	streamURL  string
+	calls      []string // method and path of the page's recent fetch/XHR calls
+	sessText   string   // the reply as the processSession stream carries it (since late 2026)
+	sessFinal  bool     // that stream marked the reply complete
 
 	usageMu      sync.Mutex
 	usagePage    pw.Page // separate tab for the usage panel; never touches the chat tab
@@ -141,7 +151,22 @@ func New(cfg config.Web, timeoutSec int, logf func(string, ...any)) *Web {
 
 func (w *Web) Name() string       { return "web" }
 func (w *Web) StableStream() bool { return false }
-func (w *Web) Models() []string   { return w.modelOptions }
+
+// Models lists the picker's entries as the app labels them, and each model
+// once more with every thinking level the picker offers ("3.1 Pro 高"). A plain
+// model name leaves the level as it is.
+func (w *Web) Models() []string {
+	out := append([]string(nil), w.modelOptions...)
+	for _, m := range w.modelOptions {
+		if w.isMode(m) {
+			continue
+		}
+		for _, l := range w.levels {
+			out = append(out, m+" "+l)
+		}
+	}
+	return out
+}
 
 func (w *Web) Ready() error {
 	if !w.started {
@@ -196,17 +221,18 @@ func (w *Web) readUsagePanel() (string, error) {
 	if _, err := pg.Goto(geminiURL, pw.PageGotoOptions{WaitUntil: pw.WaitUntilStateDomcontentloaded}); err != nil {
 		return "", fmt.Errorf("usage tab: %v", err)
 	}
-	btn := pg.Locator("[data-test-id='settings-and-help-button'], button[aria-label*='設定'], button[aria-label*='Settings']").First()
+	btn := pg.Locator(settingsSel).First()
 	if err := btn.Click(pw.LocatorClickOptions{Timeout: pw.Float(15000)}); err != nil {
 		return "", fmt.Errorf("settings button: %v", err)
 	}
 	item := pg.Locator("[data-test-id='desktop-usage-metrics-button']").First()
 	if err := item.Click(pw.LocatorClickOptions{Timeout: pw.Float(5000)}); err != nil {
-		return "", fmt.Errorf("usage menu entry: %v", err)
+		return "", fmt.Errorf("usage menu entry: %v%s", err, dumpPage(pg, "usage-menu"))
 	}
-	panel := pg.Locator("usage-metrics-window").First()
+	// the panel element (until late 2026), or the 用量 page's list of periods
+	panel := pg.Locator("usage-metrics-window, ul:has(> li[data-testid='current-usage'])").First()
 	if err := panel.WaitFor(pw.LocatorWaitForOptions{State: pw.WaitForSelectorStateVisible, Timeout: pw.Float(10000)}); err != nil {
-		return "", fmt.Errorf("usage panel did not open: %v", err)
+		return "", fmt.Errorf("usage panel did not open: %v%s", err, dumpPage(pg, "usage-panel"))
 	}
 	// the numbers load after the panel opens; wait until a percentage shows
 	var txt string
@@ -224,6 +250,21 @@ func (w *Web) readUsagePanel() (string, error) {
 		return "", fmt.Errorf("usage panel stayed empty")
 	}
 	return txt, nil
+}
+
+// dumpPage saves a page's markup as data/debug-<name>.html when an element
+// the code waits for never shows, so a change in the app's layout can be read
+// off the file. It returns a note naming the file, or nothing.
+func dumpPage(pg pw.Page, name string) string {
+	html, err := pg.Content()
+	if err != nil {
+		return ""
+	}
+	p := filepath.Join("data", "debug-"+name+".html")
+	if os.WriteFile(p, []byte(html), 0600) != nil {
+		return ""
+	}
+	return " (page saved to " + p + ")"
 }
 
 var (
@@ -322,7 +363,7 @@ func (w *Web) Start() error {
 func (w *Web) readPickerAtStart(tag string) {
 	if labels, sel, off, err := w.readModelMenu(); err == nil {
 		w.modelOptions, w.currentModel, w.unavailable = labels, sel, off
-		w.logf("%s: signed in; model picker %v, selected %q, switches on %v, unavailable %v", tag, labels, sel, w.activeModes, off)
+		w.logf("%s: signed in; model picker %v, selected %q, thinking levels %v (selected %q), switches on %v, unavailable %v", tag, labels, sel, w.levels, w.level, w.activeModes, off)
 		if len(w.activeModes) > 0 {
 			w.currentModel = "" // make the first request settle the switches
 		}
@@ -359,10 +400,20 @@ func (w *Web) NewLane(n int) (*Web, error) {
 }
 
 // captureStream keeps the raw model output: the page's streaming reply
-// carries the text before any rendering strips tags from it.
+// carries the text before any rendering strips tags from it. The app streams
+// through processSession since late 2026 (see session.go) and through
+// StreamGenerate before; both are read. It also notes the page's recent
+// fetch/XHR paths for the diagnosis of a reply that never shows up.
 func (w *Web) captureStream() {
 	w.page.On("response", func(r pw.Response) {
 		u := r.URL()
+		if t := r.Request().ResourceType(); t == "fetch" || t == "xhr" {
+			w.noteCall(r.Request().Method(), u)
+		}
+		if strings.Contains(u, "processSession") && r.Request().Method() == "GET" {
+			go w.noteSession(r)
+			return
+		}
 		if !strings.Contains(u, "StreamGenerate") {
 			return
 		}
@@ -380,6 +431,53 @@ func (w *Web) captureStream() {
 			}
 		}()
 	})
+}
+
+// noteCall keeps the path of the page's last few fetch/XHR calls (no query,
+// so nothing of the prompt), for the diagnosis when a reply never shows up.
+func (w *Web) noteCall(method, u string) {
+	if i := strings.IndexAny(u, "?#"); i >= 0 {
+		u = u[:i]
+	}
+	w.streamMu.Lock()
+	defer w.streamMu.Unlock()
+	w.calls = append(w.calls, method+" "+u)
+	if len(w.calls) > 25 {
+		w.calls = w.calls[len(w.calls)-25:]
+	}
+}
+
+// recentCalls returns the noted calls and starts a fresh list.
+func (w *Web) recentCalls() []string {
+	w.streamMu.Lock()
+	defer w.streamMu.Unlock()
+	out := w.calls
+	w.calls = nil
+	return out
+}
+
+// noteSession reads a processSession response for the reply text. Responses
+// can finish out of order, so a complete reply is not replaced by a partial one.
+func (w *Web) noteSession(r pw.Response) {
+	body, err := r.Body()
+	if err != nil {
+		return
+	}
+	text, final, ok := replyFromSession(body)
+	if !ok {
+		return
+	}
+	w.streamMu.Lock()
+	if w.sessFinal && !final {
+		w.streamMu.Unlock()
+		return
+	}
+	w.sessText, w.sessFinal = text, final
+	id, start := w.reqID, w.reqStart
+	w.streamMu.Unlock()
+	if final && id != "" {
+		w.logf("web: %s stream complete after %.1fs (%d chars)", id, time.Since(start).Seconds(), backend.Chars(text))
+	}
 }
 
 // chatTabHealthy reports whether the chat tab is in a state that can take a
@@ -500,12 +598,29 @@ func (w *Web) CopyLastReply() (string, error) {
 	return w.copyReply()
 }
 
+// PickerHTML opens the model picker on the chat tab, returns the markup of
+// the open menu and closes it again (diagnostics for the picker's layout).
+func (w *Web) PickerHTML() (string, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if err := w.openModelMenu(); err != nil {
+		return "", err
+	}
+	defer w.page.Keyboard().Press("Escape")
+	time.Sleep(800 * time.Millisecond)
+	if sub := w.page.Locator("[role='menuitem'][aria-haspopup='true'], [role='menuitem'][aria-haspopup='menu']").First(); w.exists(sub) {
+		sub.Hover(pw.LocatorHoverOptions{Timeout: pw.Float(3000)}) // open a submenu so its entries are in the markup too
+		time.Sleep(800 * time.Millisecond)
+	}
+	return w.page.Content()
+}
+
 // SettingsMenuHTML opens the bottom-left settings menu and returns the page
 // markup, then closes the menu (diagnostics for locating the usage panel).
 func (w *Web) SettingsMenuHTML(item string) (string, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	btn := w.page.Locator("[data-test-id='settings-and-help-button'], button[aria-label*='設定'], button[aria-label*='Settings']").First()
+	btn := w.page.Locator(settingsSel).First()
 	if err := btn.Click(pw.LocatorClickOptions{Timeout: pw.Float(10000)}); err != nil {
 		return "", fmt.Errorf("settings button: %v", err)
 	}
@@ -639,10 +754,12 @@ func (w *Web) readModelMenu() (labels []string, selected string, disabled []stri
 		return nil, "", nil, err
 	}
 	defer w.page.Keyboard().Press("Escape")
-	var modes, active []string
-	defer func() { w.modeOptions, w.activeModes = modes, active }()
+	var modes, active, levels []string
+	level := ""
+	defer func() { w.modeOptions, w.activeModes, w.levels, w.level = modes, active, levels, level }()
 	items := w.page.Locator("[role='menuitem']")
 	n, _ := items.Count()
+	inSubmenu := false
 	for i := 0; i < n; i++ {
 		it := items.Nth(i)
 		lab, e := it.Locator("span.label").First().TextContent(pw.LocatorTextContentOptions{Timeout: pw.Float(2000)})
@@ -650,19 +767,38 @@ func (w *Web) readModelMenu() (labels []string, selected string, disabled []stri
 			continue
 		}
 		lab = strings.TrimSpace(lab)
-		labels = append(labels, lab)
-		// model entries carry a data-test-id; a switch on top of the model
-		// (extended thinking) has none and can be selected alongside a model
+		// Model entries carry a data-test-id. An entry that opens a submenu
+		// (思考程度, the thinking level) is a header, and the entries after it
+		// are that submenu's choices. An entry with neither is a switch on top
+		// of the model (the old extended thinking).
 		tid, _ := it.GetAttribute("data-test-id", pw.LocatorGetAttributeOptions{Timeout: pw.Float(1000)})
-		isMode := !strings.HasPrefix(tid, "bard-mode-option-")
+		popup, _ := it.GetAttribute("aria-haspopup", pw.LocatorGetAttributeOptions{Timeout: pw.Float(1000)})
 		isSel := w.exists(it.Locator("gem-menu-item-content.selected")) || w.exists(it.Locator("[data-mat-icon-name='check']"))
-		if isMode {
+		if !isSel {
+			cls, _ := it.GetAttribute("class", pw.LocatorGetAttributeOptions{Timeout: pw.Float(1000)})
+			isSel = strings.Contains(" "+cls+" ", " selected ")
+		}
+		switch {
+		case popup == "true" || popup == "menu":
+			inSubmenu = true
+			continue
+		case strings.HasPrefix(tid, "bard-mode-option-"):
+			labels = append(labels, lab)
+			if isSel {
+				selected = lab
+			}
+		case inSubmenu:
+			levels = append(levels, lab)
+			if isSel {
+				level = lab
+			}
+			continue
+		default:
+			labels = append(labels, lab)
 			modes = append(modes, lab)
 			if isSel {
 				active = append(active, lab)
 			}
-		} else if isSel {
-			selected = lab
 		}
 		if dis, _ := it.GetAttribute("aria-disabled", pw.LocatorGetAttributeOptions{Timeout: pw.Float(1000)}); dis == "true" {
 			disabled = append(disabled, lab)
@@ -683,8 +819,8 @@ func (w *Web) readModelMenu() (labels []string, selected string, disabled []stri
 	return labels, selected, disabled, nil
 }
 
-// ensureModel selects want. When the app has disabled that entry (usage
-// limit), it returns a note and the request proceeds on the current model.
+// isMode says whether a picker entry is a switch on top of a model rather
+// than a model.
 func (w *Web) isMode(label string) bool {
 	for _, m := range w.modeOptions {
 		if strings.EqualFold(m, label) {
@@ -713,10 +849,74 @@ func (w *Web) clickMenuItem(label string) error {
 	return nil
 }
 
+// splitLevel reads "3.1 Pro 高" as model "3.1 Pro" at level "高", using the
+// levels the picker offers. A name without a known level is a plain model.
+func (w *Web) splitLevel(name string) (model, level string) {
+	for _, l := range w.levels {
+		if m, ok := strings.CutSuffix(name, " "+l); ok && m != "" {
+			return m, l
+		}
+	}
+	return name, ""
+}
+
+// ensureModel selects the requested model, and its thinking level when the
+// name carries one. When the app has disabled that entry (usage limit), it
+// returns a note and the request proceeds on the current model.
 func (w *Web) ensureModel(want string) (note string, err error) {
 	if want == "" {
 		return "", nil
 	}
+	want, level := w.splitLevel(want)
+	if note, err = w.ensurePlainModel(want); err != nil || note != "" {
+		return note, err
+	}
+	return "", w.selectLevel(level)
+}
+
+// selectLevel sets the picker's thinking level: it opens the picker, hovers
+// the submenu header to show the levels, and clicks the one whose label is
+// exactly level. Nothing happens when level is empty or already selected.
+func (w *Web) selectLevel(level string) error {
+	if level == "" || level == w.level {
+		return nil
+	}
+	if err := w.openModelMenu(); err != nil {
+		return err
+	}
+	header := w.page.Locator("[role='menuitem'][aria-haspopup='true'], [role='menuitem'][aria-haspopup='menu']").First()
+	if !w.exists(header) {
+		w.page.Keyboard().Press("Escape")
+		return fmt.Errorf("%q has no thinking levels in the picker", w.currentModel)
+	}
+	if err := header.Hover(pw.LocatorHoverOptions{Timeout: pw.Float(5000)}); err != nil {
+		w.page.Keyboard().Press("Escape")
+		return fmt.Errorf("thinking level submenu: %v", err)
+	}
+	items := w.page.Locator("[role='menuitem']:not([data-test-id]):not([aria-haspopup='true'])")
+	n, _ := items.Count()
+	for i := 0; i < n; i++ {
+		lab, e := items.Nth(i).Locator("span.label").First().TextContent(pw.LocatorTextContentOptions{Timeout: pw.Float(2000)})
+		if e != nil || strings.TrimSpace(lab) != level {
+			continue
+		}
+		if err := items.Nth(i).Click(pw.LocatorClickOptions{Timeout: pw.Float(5000)}); err != nil {
+			w.page.Keyboard().Press("Escape")
+			return fmt.Errorf("clicking thinking level %q: %v", level, err)
+		}
+		time.Sleep(800 * time.Millisecond)
+		if open, _ := w.page.Locator("[role='menuitem']").First().IsVisible(); open {
+			w.page.Keyboard().Press("Escape") // close the picker if the click left it open
+		}
+		w.level = level
+		w.logf("web: thinking level set to %q (on %q)", level, w.currentModel)
+		return nil
+	}
+	w.page.Keyboard().Press("Escape")
+	return fmt.Errorf("thinking level %q is not in the picker (levels: %v)", level, w.levels)
+}
+
+func (w *Web) ensurePlainModel(want string) (note string, err error) {
 	// already as asked: a plain model with no switch on, or the switch itself
 	if want == w.currentModel && (len(w.activeModes) == 0 || w.isMode(want)) {
 		return "", nil
@@ -1063,7 +1263,9 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
 	before, _ := responses.Count()
 	w.streamMu.Lock()
 	w.lastStream = nil
+	w.sessText, w.sessFinal = "", false
 	w.streamMu.Unlock()
+	w.recentCalls() // only the calls made after sending matter below
 	if err := box.Press("Enter"); err != nil {
 		return "", fmt.Errorf("sending prompt: %v", err)
 	}
@@ -1072,6 +1274,7 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
 		c.OnPhase("submitted", "")
 	}
 	start := time.Now()
+	diagnosed := false
 
 	for {
 		if stopped(c.Ctx) {
@@ -1080,6 +1283,17 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
 		}
 		if n, _ := responses.Count(); n > before {
 			break
+		}
+		if !diagnosed && time.Since(start) > 30*time.Second {
+			// Nothing for 30s: save what the page looks like, so a change in
+			// Gemini's layout can be read off the files instead of guessed.
+			diagnosed = true
+			note := dumpPage(w.page, "no-reply")
+			if img, err := w.page.Screenshot(); err == nil {
+				os.WriteFile(filepath.Join("data", "debug-no-reply.png"), img, 0600)
+			}
+			left, _ := box.Evaluate(`el => el.innerText.length`, nil, pw.LocatorEvaluateOptions{Timeout: pw.Float(2000)})
+			w.logf("web: %s no reply container 30s after sending%s; prompt box now holds %v chars; calls since sending: %v", c.ID, note, left, w.recentCalls())
 		}
 		if w.deadlinePassed(start) {
 			return "", fmt.Errorf("timeout: Gemini did not start a reply within %ds", w.timeout)
@@ -1185,7 +1399,7 @@ func (w *Web) sendAndWait(text string, c backend.Call) (string, error) {
 						}
 						time.Sleep(150 * time.Millisecond)
 					}
-					w.logf("web: %s no raw stream within 30s; using the rendered reply (tags the page strips are lost)", c.ID)
+					w.logf("web: %s no raw stream within 30s; using the rendered reply (tags the page strips are lost); calls since sending: %v", c.ID, w.recentCalls())
 				}
 				if w.cfg.ReplySource == "copy" {
 					if t, err := w.copyReply(); err == nil {
@@ -1318,10 +1532,13 @@ func pick(v any, path ...int) string {
 func (w *Web) rawReply() string {
 	w.streamMu.Lock()
 	defer w.streamMu.Unlock()
-	if len(w.lastStream) == 0 {
-		return ""
+	if len(w.lastStream) > 0 {
+		return strings.TrimSpace(rawFromStream(w.lastStream))
 	}
-	return strings.TrimSpace(rawFromStream(w.lastStream))
+	if w.sessFinal {
+		return strings.TrimSpace(w.sessText)
+	}
+	return ""
 }
 
 func (w *Web) markdownOf(html string) string {

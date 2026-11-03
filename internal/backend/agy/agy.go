@@ -236,38 +236,7 @@ func (a *Agy) Complete(c backend.Call) (backend.Result, error) {
 
 // Usage runs agy's /usage command and returns the parsed rows.
 func (a *Agy) Usage() (any, error) {
-	cmd := exec.Command(a.cfg.Binary, "--print", "/usage", "--output-format", "text")
-	backend.PrepareAgy(cmd)
-	cmd.Dir = a.cfg.Workspace
-	out, err := cmd.CombinedOutput()
-	if err != nil && len(out) == 0 {
-		return nil, err
-	}
-	type row struct {
-		Pool      string `json:"pool"`
-		Window    string `json:"window"`
-		Remaining string `json:"remaining"`
-		ResetsAt  string `json:"resets_at,omitempty"`
-		ResetsIn  string `json:"resets_in,omitempty"`
-	}
-	var rows []row
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		f := strings.Split(line, "\t")
-		if len(f) >= 3 {
-			r := row{Pool: f[0], Window: f[1], Remaining: f[2]}
-			if len(f) >= 4 {
-				r.ResetsAt = f[3]
-				if t, err := time.Parse(time.RFC3339, f[3]); err == nil {
-					r.ResetsIn = time.Until(t).Round(time.Minute).String()
-				}
-			}
-			rows = append(rows, r)
-		}
-	}
-	if len(rows) == 0 {
-		return nil, fmt.Errorf("unexpected /usage output: %s", firstLine(string(out)))
-	}
-	return rows, nil
+	return backend.AgyUsage(a.cfg.Binary, a.cfg.Workspace)
 }
 
 func firstLine(s string) string {

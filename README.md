@@ -32,7 +32,7 @@ nothing and adds nothing; it uses what your subscription already gives you.
    `http://localhost:18765/v1`. To try it from PowerShell:
 
    ```powershell
-   '{"model":"agyapi/gemini-3.1-pro","messages":[{"role":"user","content":"Write a two-sentence story about a cat who learns to sail."}]}' | curl.exe -s http://localhost:18765/v1/chat/completions -H "Content-Type: application/json" -d "@-"
+   '{"model":"agyapi/gemini-3.8-flash-low","messages":[{"role":"user","content":"Write a two-sentence story about a cat who learns to sail."}]}' | curl.exe -s http://localhost:18765/v1/chat/completions -H "Content-Type: application/json" -d "@-"
    ```
 
 ### Run
@@ -152,7 +152,7 @@ Then a request:
 
 ```bash
 curl -s localhost:18765/v1/chat/completions -H "Content-Type: application/json" \
-  -d '{"model":"agyapi/gemini-3.1-pro","messages":[{"role":"user","content":"hello"}]}'
+  -d '{"model":"agyapi/gemini-3.8-flash-low","messages":[{"role":"user","content":"hello"}]}'
 ```
 
 The Gemini sign-in needs a screen once (WSL needs WSLg); on a headless server, sign in elsewhere and copy
@@ -165,8 +165,8 @@ window or tray icon outside Windows: the server stays in the terminal.
 | Endpoint | Purpose |
 |---|---|
 | `POST /v1/chat/completions` | OpenAI chat completions, streaming or not |
-| `GET /v1/models` | one entry per model of every enabled backend, under its family name (see below) |
-| `GET /all/v1/models`, `POST /all/v1/chat/completions` | the same endpoints with every model a backend has, under the backend's own names |
+| `GET /v1/models` | every model of every enabled backend, under the backend's own names (see below) |
+| `GET /all/v1/models`, `POST /all/v1/chat/completions` | the same as `/v1`, kept for base URLs set before 0.6.4 |
 | `GET /usage` | the dashboard (`/` redirects here) |
 | `GET /usage/cached`, `POST /usage/refresh?backend=` | the cache behind it; a refresh asks one backend |
 | `GET /status` (`?format=text`), `GET /status/stream` | what every request is doing, once or pushed as server-sent events |
@@ -176,15 +176,15 @@ window or tray icon outside Windows: the server stays in the terminal.
 
 ### Model names
 
-A model is `<backend>/<name>`, for example `web/3.1 Pro` or `agyapi/gemini-3.1-pro`. `GET /v1/models` lists what is
-on offer; a bare name that exists in only one backend also works, otherwise it goes to `default_backend`.
+A model is `<backend>/<name>`, for example `web/3.1 Pro` or `agyapi/gemini-3.8-flash-low`. `GET /v1/models` lists
+what is on offer; a bare name that exists in only one backend also works, otherwise it goes to `default_backend`.
 
-- **`/v1` shows one name per model.** Where a model comes in thinking levels, the low one stands for it and the
-  suffix is dropped: `gemini-3.8-flash` means `gemini-3.8-flash-low`, `claude-opus-4-6` means the thinking variant.
-- **`/all/v1` shows every model** under the backend's own name, levels and all. Use it to pick a level yourself;
-  `[models]` in the config sets which level `/v1` shows and what to hide.
-- **Extended thinking** (延伸思考) is a Gemini switch, not a model: `web/3.1 Pro` is plain Pro, `web/延伸思考` turns it
-  on, and it appears on `/all/v1` only.
+- **Every name is the backend's own.** agy and agyapi list the service's ids with their thinking level
+  (`gemini-3.8-flash-low`, `-medium`, `-high`); nothing is merged, renamed or hidden, so a model or level the
+  service adds shows up as it is.
+- **Web models carry the picker's thinking level** (思考程度). `web/3.1 Pro 高` selects 3.1 Pro at 高;
+  `web/3.1 Pro` selects the model and leaves the level as it is. The labels are the app's, in its language.
+- At startup the log warns when `[agy]` or `[agyapi]` `model` names a model the service no longer offers.
 
 ## Configuration
 

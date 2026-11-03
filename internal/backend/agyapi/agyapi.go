@@ -696,18 +696,20 @@ func readStream(r io.Reader, tool *backend.Transport, onPhase func(phase, note s
 	return st, sc.Err()
 }
 
-// Usage returns the quota buckets from retrieveUserQuota.
+// Usage returns the Antigravity quota, which agyapi shares with agy. The
+// agy CLI's /usage is read first: the service's own quota summary leaves the
+// Gemini groups out for clients other than the CLI. The service calls stay
+// as the fallback when agy cannot run.
 func (a *AgyAPI) Usage() (any, error) {
 	if err := a.Ready(); err != nil {
 		return nil, err
 	}
-	type row struct {
-		Pool      string `json:"pool"`
-		Window    string `json:"window"`
-		Remaining string `json:"remaining"`
-		ResetsAt  string `json:"resets_at,omitempty"`
-		ResetsIn  string `json:"resets_in,omitempty"`
+	if rows, err := backend.AgyUsage(a.cfg.AgyBinary, ""); err == nil {
+		return rows, nil
+	} else {
+		a.logf("agyapi: usage via agy /usage failed (%v); asking the service", err)
 	}
+	type row = backend.QuotaRow
 	var rows []row
 	// The summary is what the agy CLI's /usage shows: per model group (Gemini;
 	// Claude and GPT), a weekly and a 5-hour bucket. The per-model call

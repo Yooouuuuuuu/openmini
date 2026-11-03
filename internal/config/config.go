@@ -16,7 +16,6 @@ type Config struct {
 	Web     Web     `toml:"web"`
 	Agy     Agy     `toml:"agy"`
 	AgyAPI  AgyAPI  `toml:"agyapi"`
-	Models  Models  `toml:"models"`
 	History History `toml:"history"`
 	Extra   Extra   `toml:"extra"`
 }
@@ -35,12 +34,6 @@ type Extra struct {
 type History struct {
 	Enabled   bool   `toml:"enabled"`
 	Directory string `toml:"directory"`
-}
-
-// Models says what /v1/models offers; /all/v1 always has everything.
-type Models struct {
-	Level string   `toml:"level"` // which thinking level stands for a model that comes in low/medium/high
-	Hide  []string `toml:"hide"`  // ids or glob patterns left off /v1
 }
 
 type Server struct {
@@ -142,12 +135,6 @@ func (c *Config) applyDefaults() {
 	if c.Server.Port == 0 {
 		c.Server.Port = 18765
 	}
-	if c.Models.Level == "" {
-		c.Models.Level = "low"
-	}
-	if c.Models.Hide == nil {
-		c.Models.Hide = []string{"延伸思考", "gemini-pro-agent"}
-	}
 	if c.Server.DefaultBackend == "" {
 		c.Server.DefaultBackend = "web"
 	}
@@ -213,7 +200,7 @@ func (c *Config) applyDefaults() {
 		x.Endpoint = "https://daily-cloudcode-pa.googleapis.com"
 	}
 	if x.Model == "" {
-		x.Model = "gemini-3.1-pro-low"
+		x.Model = "gemini-3.8-flash-low"
 	}
 	if x.CreditTypes == nil {
 		x.CreditTypes = []string{"GOOGLE_ONE_AI"}
@@ -265,13 +252,6 @@ anti_truncation = false
 # ignored the declared function and had its plain text cut. A cut plain-text
 # reply with anti_truncation off is not retried. Default 1.
 # retries = 1
-
-[models]
-# What /v1/models offers: one entry per model, at this thinking level where a
-# model comes in low/medium/high, minus the hide list. Everything a backend
-# really has is on /all/v1 (the same endpoints with the full list).
-level = "low"
-hide = ["延伸思考", "gemini-pro-agent"]
 
 [log]
 directory = "./logs"
@@ -342,7 +322,7 @@ enabled = true
 binary = "agy" # name on the PATH or a full path; the install folder is tried too
 agent = "storyteller"
 mode = "plan"
-model = "gemini-3.1-pro-low"
+model = "gemini-3.8-flash-low"
 effort = ""
 workspace = "./data/agy-workspace"
 # Requests agy runs at once; a burst overlaps instead of queueing. Default 10.
@@ -371,8 +351,8 @@ ide_type = "ANTIGRAVITY"
 # production host cloudcode-pa.googleapis.com answers 429 for generation.
 endpoint = "https://daily-cloudcode-pa.googleapis.com"
 # project = ""    # normally resolved automatically
-# Default model id, as listed by the service (agy's slugs, e.g. gemini-3.1-pro-low).
-model = "gemini-3.1-pro-low"
+# Default model id, as listed by the service (agy's slugs, e.g. gemini-3.8-flash-low).
+model = "gemini-3.8-flash-low"
 # Subscription entitlement the requests draw on. GOOGLE_ONE_AI is the Google AI
 # Pro/Ultra plan; set to [] to send none.
 credit_types = ["GOOGLE_ONE_AI"]

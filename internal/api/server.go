@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"path"
 	"sort"
 	"strings"
 	"sync"
@@ -98,9 +97,9 @@ func (s *Server) Listen() error {
 	app.Post("/shutdown", s.handleShutdown)
 	app.Get("/v1/models", s.handleModels)
 	app.Post("/v1/chat/completions", s.handleChat)
-	// the same endpoints with every model a backend has, not just the curated set
-	app.Get("/all/v1/models", s.all(s.handleModels))
-	app.Post("/all/v1/chat/completions", s.all(s.handleChat))
+	// /all/v1 is kept so base URLs set before 0.6.4 keep working; it is /v1
+	app.Get("/all/v1/models", s.handleModels)
+	app.Post("/all/v1/chat/completions", s.handleChat)
 	app.Post("/tools/policy-bisect", s.handlePolicyBisect)
 	app.Get("/debug/agyapi/quota", func(c *fiber.Ctx) error {
 		b, ok := s.backends["agyapi"]
@@ -136,6 +135,14 @@ func (s *Server) Listen() error {
 		})
 		app.Get("/debug/web/settings", func(c *fiber.Ctx) error {
 			h, err := s.webDebug.SettingsMenuHTML(c.Query("item"))
+			if err != nil {
+				return c.Status(500).SendString(err.Error())
+			}
+			c.Set("Content-Type", "text/plain; charset=utf-8")
+			return c.SendString(h)
+		})
+		app.Get("/debug/web/picker", func(c *fiber.Ctx) error {
+			h, err := s.webDebug.PickerHTML()
 			if err != nil {
 				return c.Status(500).SendString(err.Error())
 			}
@@ -279,10 +286,10 @@ func (s *Server) handleStatus(c *fiber.Ctx) error {
 }
 
 // resolve maps a request model name to a backend and its model id.
-// "web/3.1 Pro" and "agy/gemini-3.1-pro-low" are explicit; a bare name that
+// "web/3.1 Pro" and "agy/gemini-3.8-flash-low" are explicit; a bare name that
 // matches exactly one backend's list routes there; anything else goes to the
 // default backend as its default model.
-func (s *Server) resolve(name string, all bool) (backend.Backend, string, error) {
+func (s *Server) resolve(name string) (backend.Backend, string, error) {
 	name = strings.TrimSpace(name)
 	if i := strings.IndexByte(name, '/'); i > 0 {
 		if b, ok := s.backends[name[:i]]; ok {
@@ -290,15 +297,14 @@ func (s *Server) resolve(name string, all bool) (backend.Backend, string, error)
 			if m == "default" || m == "" {
 				return b, "", nil
 			}
-			id, err := s.lookup(b, m, all)
-			return b, id, err
+			return b, lookup(b, m), nil
 		}
 		return nil, "", fmt.Errorf("unknown backend prefix %q", name[:i])
 	}
 	var match backend.Backend
 	var matchID string
 	for _, b := range s.backends {
-		_, real := s.offered(b, all)
+		_, real := offered(b)
 		if id, ok := real[strings.ToLower(name)]; ok {
 			if match != nil && match != b {
 				match = nil
@@ -315,14 +321,6 @@ func (s *Server) resolve(name string, all bool) (backend.Backend, string, error)
 		return nil, "", fmt.Errorf("default backend %q is not enabled", s.cfg.Server.DefaultBackend)
 	}
 	return b, "", nil
-}
-
-// all marks a request as made on /all/v1, where nothing is hidden.
-func (s *Server) all(h fiber.Handler) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		c.Locals("all", true)
-		return h(c)
-	}
 }
 
 // refusing stands in for a backend whose request must not run: Complete
@@ -377,95 +375,25 @@ func family(id string) (base, level string) {
 	return id, ""
 }
 
-// curated is what /v1 offers out of a backend's list: nothing on the hide
-// list, and one entry per model, preferring the configured level, then the
-// cheaper ones, then whatever the model comes in.
-func (s *Server) curated(ids []string) []string {
-	hidden := func(id string) bool {
-		for _, p := range s.cfg.Models.Hide {
-			if strings.EqualFold(p, id) {
-				return true
-			}
-			if ok, _ := path.Match(strings.ToLower(p), strings.ToLower(id)); ok {
-				return true
-			}
-		}
-		return false
-	}
-	rank := func(level string) int {
-		order := []string{s.cfg.Models.Level, "low", "medium", "high", "", "thinking"}
-		for i, l := range order {
-			if l == level {
-				return i
-			}
-		}
-		return len(order)
-	}
-	best := map[string]string{} // family -> chosen id
-	var order []string
-	for _, id := range ids {
-		if hidden(id) {
-			continue
-		}
-		base, level := family(id)
-		cur, seen := best[base]
-		if !seen {
-			best[base] = id
-			order = append(order, base)
-			continue
-		}
-		if _, curLevel := family(cur); rank(level) < rank(curLevel) {
-			best[base] = id
-		}
-	}
-	out := make([]string, 0, len(order))
-	for _, base := range order {
-		out = append(out, best[base])
-	}
-	return out
-}
-
-// offered is what a base URL lists for a backend and what each name stands
-// for. On /all/v1 that is every id as the backend names it. On /v1 it is the
-// curated set under family names (gemini-3.8-flash for gemini-3.8-flash-low,
-// claude-opus-4-6 for the -thinking variant); the full curated id is
-// accepted there too.
-func (s *Server) offered(b backend.Backend, all bool) (names []string, real map[string]string) {
+// offered is every model a backend reports, under the backend's own names,
+// with a case-insensitive index from name to id. Nothing is merged, renamed
+// or hidden, so a model or level the service adds shows up as it is.
+func offered(b backend.Backend) (names []string, real map[string]string) {
 	real = map[string]string{}
-	if all {
-		for _, id := range b.Models() {
-			names = append(names, id)
-			real[strings.ToLower(id)] = id
-		}
-		return
-	}
-	for _, id := range s.curated(b.Models()) {
-		short, _ := family(id)
-		names = append(names, short)
-		real[strings.ToLower(short)] = id
+	for _, id := range b.Models() {
+		names = append(names, id)
 		real[strings.ToLower(id)] = id
 	}
 	return
 }
 
-// lookup maps a requested name to a backend's real id on the given base
-// URL. Unknown names on /all/v1 pass through for the backend to judge; on
-// /v1 they are refused with a pointer to /all/v1.
-func (s *Server) lookup(b backend.Backend, name string, all bool) (string, error) {
-	_, real := s.offered(b, all)
-	if id, ok := real[strings.ToLower(name)]; ok {
-		return id, nil
+// lookup maps a requested name to a backend's id, ignoring case. A name the
+// backend does not list passes through for the backend itself to judge.
+func lookup(b backend.Backend, name string) string {
+	if _, real := offered(b); real[strings.ToLower(name)] != "" {
+		return real[strings.ToLower(name)]
 	}
-	known := false
-	for _, m := range b.Models() {
-		if strings.EqualFold(m, name) {
-			known = true
-		}
-	}
-	if all || !known {
-		return name, nil
-	}
-	return "", fmt.Errorf("model %q is not offered on /v1; the same request works on /all/v1", b.Name()+"/"+name)
+	return name
 }
 
 // probeModel is the cheap model the policy-bisect tool probes with: the
@@ -528,7 +456,7 @@ func (s *Server) handleModels(c *fiber.Ctx) error {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		ids, _ := s.offered(s.backends[n], c.Locals("all") == true)
+		ids, _ := offered(s.backends[n])
 		for _, m := range ids {
 			data = append(data, fiber.Map{"id": n + "/" + m, "object": "model", "created": s.started.Unix(), "owned_by": "openmini"})
 		}
@@ -811,7 +739,7 @@ func (s *Server) handleChat(c *fiber.Ctx) error {
 		s.recent = s.recent[:5]
 	}
 	s.recentMu.Unlock()
-	b, model, err := s.resolve(req.Model, c.Locals("all") == true)
+	b, model, err := s.resolve(req.Model)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": fiber.Map{"message": err.Error(), "type": "invalid_request_error"}})
 	}
@@ -1115,7 +1043,7 @@ func (s *Server) handlePolicyBisect(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 	}
-	b, model, err := s.resolve(req.Model, true) // the tool takes any id a backend has
+	b, model, err := s.resolve(req.Model)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 	}
